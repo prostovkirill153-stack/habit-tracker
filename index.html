@@ -1,0 +1,823 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Трекер привычек</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+:root{
+  --bg: var(--tg-theme-secondary-bg-color, #f2f2f7);
+  --card: var(--tg-theme-section-bg-color, var(--tg-theme-bg-color, #ffffff));
+  --text: var(--tg-theme-text-color, #111111);
+  --hint: var(--tg-theme-hint-color, #8e8e93);
+  --accent: var(--tg-theme-button-color, #3390ec);
+  --accent-text: var(--tg-theme-button-text-color, #ffffff);
+  --danger: var(--tg-theme-destructive-text-color, #e5484d);
+  --line: rgba(127,127,127,.2);
+  --soft: rgba(127,127,127,.14);
+}
+@media (prefers-color-scheme: dark){
+  :root:not(.tg){ --bg:#000000; --card:#1c1c1e; --text:#f2f2f7; --hint:#8e8e93; --line:rgba(255,255,255,.12); --soft:rgba(255,255,255,.1); }
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--text)}
+body{font:15px/1.35 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;padding:0 16px calc(96px + env(safe-area-inset-bottom));min-height:100vh;user-select:none;-webkit-user-select:none}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+button:disabled{opacity:.3;cursor:default}
+input{font:inherit;color:var(--text)}
+#app{max-width:560px;margin:0 auto}
+.loading{padding:40vh 0;text-align:center;color:var(--hint)}
+
+.top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:18px 2px 12px}
+.title{font-size:28px;font-weight:700;letter-spacing:-.4px}
+.sub{color:var(--hint);font-size:14px;margin-top:2px}
+.navrow{display:flex;align-items:center;justify-content:space-between;padding:14px 0 4px;min-height:44px}
+.link{color:var(--accent);font-size:16px;padding:6px 2px}
+.card{background:var(--card);border-radius:16px;padding:14px;margin-bottom:12px}
+.card h3{margin:0 0 10px;font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;color:var(--hint)}
+.section{font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;color:var(--hint);margin:18px 4px 8px}
+
+/* неделя */
+.week{display:flex;align-items:center;gap:4px;margin-bottom:12px}
+.arrow{width:28px;height:52px;font-size:22px;color:var(--hint);flex:none}
+.days{flex:1;display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.day{display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 0 5px;border-radius:12px;background:var(--card)}
+.day .wd{font-size:11px;color:var(--hint)}
+.day .dn{font-size:16px;font-weight:600}
+.day.today .dn{color:var(--accent)}
+.day.sel{background:var(--accent);color:var(--accent-text)}
+.day.sel .wd,.day.sel .dn{color:var(--accent-text)}
+.dot{width:5px;height:5px;border-radius:50%;background:transparent}
+.dot.part{background:var(--hint)}
+.dot.full{background:#34c759}
+.day.sel .dot.part,.day.sel .dot.full{background:var(--accent-text)}
+
+/* прогресс */
+.prog{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;font-weight:600}
+.prog span{color:var(--hint);font-weight:400;font-size:14px}
+.bar-bg{height:8px;border-radius:4px;background:var(--soft);overflow:hidden}
+.bar-fg{height:100%;border-radius:4px;background:var(--accent);transition:width .3s}
+
+/* привычки */
+.habit{display:flex;align-items:center;gap:12px;background:var(--card);border-radius:16px;padding:12px 12px 12px 14px;margin-bottom:8px;cursor:pointer;transition:transform .1s}
+.habit:active{transform:scale(.985)}
+.ico{width:44px;height:44px;border-radius:13px;display:flex;align-items:center;justify-content:center;font-size:22px;flex:none}
+.meta{flex:1;min-width:0}
+.name{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.habit.is-done .name{opacity:.55}
+.hsub{color:var(--hint);font-size:13px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chk{width:40px;height:40px;border-radius:50%;border:2px solid var(--line);display:flex;align-items:center;justify-content:center;color:transparent;flex:none;transition:all .15s}
+.chk.on{background:var(--c);border-color:var(--c);color:#fff}
+.cnt{display:flex;align-items:center;gap:6px;flex:none}
+.mini{width:30px;height:30px;border-radius:50%;background:var(--soft);font-size:18px;color:var(--hint)}
+.plus{width:42px;height:42px;border-radius:50%;padding:3px;background:conic-gradient(var(--c) var(--p),var(--soft) 0)}
+.plus>b{display:flex;align-items:center;justify-content:center;width:100%;height:100%;border-radius:50%;background:var(--card);color:var(--c);font-size:22px;font-weight:600}
+.plus.on>b{background:var(--c);color:#fff}
+.slip{padding:8px 12px;border-radius:20px;border:1.5px solid var(--line);color:var(--hint);font-size:13px;font-weight:600;flex:none}
+.slip.on{background:var(--danger);border-color:var(--danger);color:#fff}
+.rest{text-align:center;color:var(--hint);padding:28px 0}
+
+/* пустое состояние */
+.empty{text-align:center;padding:24px 8px 8px}
+.empty .big{font-size:56px}
+.empty p{color:var(--hint);margin:8px 0 20px}
+.presets{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+.preset{background:var(--card);border-radius:14px;padding:12px;text-align:left;display:flex;align-items:center;gap:10px;font-weight:500}
+.preset i{font-style:normal;font-size:22px}
+
+/* кнопки */
+.btn{display:block;width:100%;padding:14px;border-radius:14px;background:var(--accent);color:var(--accent-text);font-weight:600;font-size:16px;text-align:center}
+.btn.ghost{background:var(--soft);color:var(--text)}
+.btn.danger{background:var(--danger);color:#fff}
+.btn.text-danger{background:transparent;color:var(--danger)}
+.fab{position:fixed;right:max(20px,calc(50% - 260px));bottom:calc(84px + env(safe-area-inset-bottom));width:56px;height:56px;border-radius:50%;background:var(--accent);color:var(--accent-text);font-size:30px;line-height:1;box-shadow:0 6px 20px rgba(0,0,0,.2);z-index:5}
+
+/* таббар */
+.tabs{position:fixed;left:0;right:0;bottom:0;display:flex;justify-content:center;gap:8px;background:var(--card);border-top:1px solid var(--line);padding:8px 16px calc(8px + env(safe-area-inset-bottom));z-index:4}
+.tabs button{flex:1;max-width:260px;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:11px;color:var(--hint);padding:4px 0}
+.tabs button.on{color:var(--accent)}
+.tabs svg{width:24px;height:24px}
+
+/* детали */
+.hero{text-align:center;padding:8px 0 16px}
+.hero .ico{width:72px;height:72px;border-radius:22px;font-size:38px;margin:0 auto 10px}
+.hero .title{font-size:24px}
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+.tile{background:var(--card);border-radius:16px;padding:12px 14px}
+.tile b{display:block;font-size:24px;font-weight:700}
+.tile span{color:var(--hint);font-size:13px}
+.heatwrap{display:flex;gap:6px}
+.hlabels{display:grid;grid-template-rows:repeat(7,14px);gap:3px;font-size:10px;color:var(--hint);line-height:14px}
+.heat{display:grid;grid-template-rows:repeat(7,14px);grid-auto-flow:column;grid-auto-columns:14px;gap:3px;overflow-x:auto;scrollbar-width:none;flex:1}
+.heat::-webkit-scrollbar{display:none}
+.c{display:block;border-radius:3px;background:var(--soft)}
+.c.off{opacity:.35}
+.c.fut{background:transparent}
+.c.slipd{background:var(--danger);opacity:.7}
+.legend{display:flex;gap:12px;margin-top:10px;font-size:12px;color:var(--hint);align-items:center}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px}
+.ach{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.ach div{text-align:center;padding:10px 4px;border-radius:12px;background:var(--soft);font-size:12px;color:var(--hint)}
+.ach div i{display:block;font-style:normal;font-size:26px;margin-bottom:2px}
+.ach div.lock i{filter:grayscale(1);opacity:.35}
+.ach div.got{color:var(--text)}
+
+/* статистика */
+.bars{display:flex;align-items:flex-end;gap:8px;height:120px}
+.bars .bar{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;gap:6px}
+.bars .track{flex:1;width:100%;display:flex;align-items:flex-end;justify-content:center}
+.bars .bfill{width:100%;max-width:34px;border-radius:8px 8px 4px 4px;background:var(--accent);min-height:4px}
+.bars .bfill.zero{background:var(--soft)}
+.bars span{font-size:11px;color:var(--hint)}
+.hrow{display:flex;align-items:center;gap:10px;padding:8px 0;cursor:pointer}
+.hrow+.hrow{border-top:1px solid var(--line)}
+.hrow .ico{width:34px;height:34px;border-radius:10px;font-size:17px}
+.hrow .bar-bg{margin-top:6px;height:6px}
+.hrow .pct{font-weight:600;min-width:44px;text-align:right}
+.foot{text-align:center;color:var(--hint);font-size:12px;margin:16px 0}
+
+/* форма */
+.field{background:var(--card);border-radius:16px;padding:12px 14px;margin-bottom:10px}
+.field label{display:block;font-size:13px;color:var(--hint);margin-bottom:8px}
+.inp{width:100%;border:0;outline:0;background:var(--soft);border-radius:10px;padding:11px 12px;font-size:16px}
+.row2{display:flex;gap:8px}
+.row2>*{flex:1}
+.emojis{display:grid;grid-template-columns:repeat(8,1fr);gap:4px}
+.emojis button{aspect-ratio:1;border-radius:10px;font-size:22px}
+.emojis button.on{background:var(--soft);box-shadow:inset 0 0 0 2px var(--accent)}
+.colors{display:flex;gap:10px;flex-wrap:wrap}
+.colors button{width:32px;height:32px;border-radius:50%}
+.colors button.on{box-shadow:0 0 0 3px var(--card),0 0 0 5px var(--text)}
+.seg{display:flex;background:var(--soft);border-radius:10px;padding:2px}
+.seg button{flex:1;padding:8px 4px;border-radius:8px;font-size:14px;font-weight:500}
+.seg button.on{background:var(--card);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.desc{font-size:13px;color:var(--hint);margin-top:8px}
+.chips{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.chips button{padding:9px 0;border-radius:10px;background:var(--soft);font-weight:600;font-size:13px}
+.chips button.on{background:var(--accent);color:var(--accent-text)}
+.quick{display:flex;gap:6px;margin-top:8px}
+.quick button{font-size:13px;color:var(--accent);padding:4px 8px;border-radius:8px;background:var(--soft)}
+.switch-row{display:flex;align-items:center;justify-content:space-between}
+.switch{width:51px;height:31px;border-radius:16px;background:var(--line);position:relative;transition:background .2s;flex:none}
+.switch::after{content:"";position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:50%;background:#fff;box-shadow:0 2px 4px rgba(0,0,0,.2);transition:transform .2s}
+.switch.on{background:#34c759}
+.switch.on::after{transform:translateX(20px)}
+
+/* тост и модалка */
+.toast{position:fixed;left:50%;bottom:calc(150px + env(safe-area-inset-bottom));transform:translateX(-50%);background:rgba(30,30,30,.92);color:#fff;padding:10px 16px;border-radius:12px;font-size:14px;z-index:20;max-width:90vw;text-align:center;animation:pop .2s}
+@keyframes pop{from{opacity:0;transform:translate(-50%,8px)}}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:flex-end;justify-content:center;z-index:30;padding:16px}
+.sheet{background:var(--card);border-radius:18px;padding:18px;width:100%;max-width:420px;margin-bottom:env(safe-area-inset-bottom)}
+.sheet p{margin:0 0 16px;text-align:center;font-weight:500}
+
+/* серия как в Duolingo */
+.streakpill{display:flex;align-items:center;gap:10px;background:var(--card);border-radius:20px;padding:7px 12px;font-weight:700;font-size:16px;flex:none;margin-bottom:4px}
+.streakpill .fire{filter:grayscale(1);opacity:.45}
+.streakpill .num{color:var(--hint)}
+.streakpill.on .fire{filter:none;opacity:1}
+.streakpill.on .num{color:#ff9500}
+.streakpill .ice{color:#4fb3ff}
+.streakpill.lit{animation:lit .6s ease}
+@keyframes lit{0%{transform:scale(1)}35%{transform:scale(1.25)}100%{transform:scale(1)}}
+.banner{display:flex;align-items:center;gap:12px;background:var(--card);border-radius:16px;padding:12px 14px;margin-bottom:12px;font-size:14px}
+.banner i{font-style:normal;font-size:26px}
+.banner.ice{box-shadow:inset 0 0 0 1.5px #4fb3ff}
+.dot.ice{background:#4fb3ff}
+.day.sel .dot.ice{background:var(--accent-text)}
+.bigfire{text-align:center;padding:10px 0 4px}
+.bigfire .f{font-size:96px;line-height:1.1}
+.bigfire.off .f{filter:grayscale(1);opacity:.4}
+.bigfire .n{font-size:48px;font-weight:800;color:#ff9500;line-height:1}
+.bigfire.off .n{color:var(--hint)}
+.bigfire .l{font-weight:600;margin-top:2px}
+.bigfire .h{color:var(--hint);font-size:14px;margin:8px 24px 16px}
+.grid7{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;text-align:center}
+.grid7 .wd{font-size:11px;color:var(--hint)}
+.grid7 .cell{aspect-ratio:1;border-radius:10px;background:var(--soft);display:flex;align-items:center;justify-content:center;font-size:20px}
+.grid7 .cell.none,.grid7 .cell.fut{background:transparent}
+.grid7 .cell.missed{color:var(--hint);font-size:14px}
+.grid7 .cell.today{box-shadow:inset 0 0 0 2px var(--accent)}
+.slots{display:flex;gap:10px;margin-bottom:10px}
+.slot{width:60px;height:60px;border-radius:16px;background:rgba(79,179,255,.15);font-size:32px;display:flex;align-items:center;justify-content:center}
+.slot.empty{background:var(--soft);filter:grayscale(1);opacity:.4}
+</style>
+</head>
+<body>
+<div id="app"><div class="loading">Загрузка…</div></div>
+
+<script>
+'use strict';
+
+/* ---------- настройки ---------- */
+// Если index.html раздаёт сам бот (bot.py) — оставь пустым.
+// Если фронт лежит отдельно (GitHub Pages), впиши https-адрес бота, например 'https://my-bot.onrender.com'
+const API_BASE = '';
+
+/* ---------- Telegram ---------- */
+const tg = window.Telegram && window.Telegram.WebApp;
+const inTG = !!(tg && tg.initData);
+const ver = v => { try { return !!(tg && tg.isVersionAtLeast && tg.isVersionAtLeast(v)); } catch (e) { return false; } };
+if (inTG) {
+  document.documentElement.classList.add('tg');
+  tg.ready();
+  tg.expand();
+  try { if (ver('7.7')) tg.disableVerticalSwipes(); } catch (e) {}
+}
+const hap = {
+  tap() { try { if (inTG && ver('6.1')) tg.HapticFeedback.impactOccurred('light'); } catch (e) {} },
+  ok()  { try { if (inTG && ver('6.1')) tg.HapticFeedback.notificationOccurred('success'); } catch (e) {} },
+};
+
+/* ---------- даты ---------- */
+const pad = n => String(n).padStart(2, '0');
+const key = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const parse = k => { const [y, m, d] = k.split('-').map(Number); return new Date(y, m - 1, d); };
+const addDays = (k, n) => { const d = parse(k); d.setDate(d.getDate() + n); return key(d); };
+const todayKey = () => key(new Date());
+const isoWd = k => (parse(k).getDay() + 6) % 7 + 1; // Пн=1 … Вс=7
+const WD = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+const WD_FULL = ['понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота', 'воскресенье'];
+const MONTHS = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+const plural = (n, a, b, c) => { const m10 = n % 10, m100 = n % 100; return m10 === 1 && m100 !== 11 ? a : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? b : c; };
+const dni = n => `${n} ${plural(n, 'день', 'дня', 'дней')}`;
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+
+/* ---------- константы ---------- */
+const EMOJIS = ['🎯','💧','📖','🏃','🧘','💪','🇬🇧','🧠','😴','🥗','🚶','🦷','✍️','🎸','🎨','💰','🧹','🌅','☕','📵','🍬','🚭','🙏','💊'];
+const COLORS = ['#3390ec','#34c759','#ff9500','#ff3b30','#af52de','#5ac8fa','#ff2d55','#a2845e'];
+const PRESETS = [
+  { name: 'Пить воду', emoji: '💧', color: '#5ac8fa', type: 'count', target: 8, unit: 'стаканов' },
+  { name: 'Чтение', emoji: '📖', color: '#ff9500', type: 'count', target: 20, unit: 'страниц' },
+  { name: 'Зарядка', emoji: '🏃', color: '#34c759', type: 'check' },
+  { name: 'Английский', emoji: '🇬🇧', color: '#3390ec', type: 'check' },
+  { name: 'Медитация', emoji: '🧘', color: '#af52de', type: 'check' },
+  { name: 'Без сладкого', emoji: '🍬', color: '#ff2d55', type: 'quit' },
+];
+const ACH = [[3, '🌱', '3 дня'], [7, '🔥', 'Неделя'], [14, '⭐', '2 недели'], [30, '🏅', 'Месяц'], [60, '🏆', '2 месяца'], [100, '💎', '100 дней']];
+const ICON_CHECK = '<svg viewBox="0 0 24 24" width="20" height="20"><path d="M5 12.5l4.2 4.2L19 7" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const ICON_TODAY = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="5"/><path d="M8 12l3 3 5-6"/></svg>';
+const ICON_STATS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 20V12M12 20V5M19 20v-9"/></svg>';
+
+/* ---------- состояние ---------- */
+const S = {
+  habits: [],      // {id,name,emoji,color,type:'check'|'count'|'quit',target,unit,days:[1..7],remind:'HH:MM'|null,created,order}
+  log: {},         // log[habitId][YYYY-MM-DD] = число
+  tab: 'today', view: 'main', sel: todayKey(), detailId: null, form: null, formBack: 'main',
+  lastToday: todayKey(), lastView: null, sim: null, justLit: false,
+};
+
+/* ---------- хранилище: облако Telegram → localStorage → память ---------- */
+const store = (() => {
+  const cloud = inTG && ver('6.9') && tg.CloudStorage;
+  const P = 'ht_';
+  let ls = null;
+  try { localStorage.setItem('__t', '1'); localStorage.removeItem('__t'); ls = localStorage; } catch (e) {}
+  const mem = {};
+  const call = (method, ...args) => new Promise((res, rej) =>
+    tg.CloudStorage[method](...args, (err, val) => err ? rej(err) : res(val)));
+  return {
+    kind: cloud ? 'cloud' : ls ? 'local' : 'memory',
+    async all() {
+      if (cloud) {
+        const keys = (await call('getKeys')) || [];
+        const out = {};
+        for (let i = 0; i < keys.length; i += 50) Object.assign(out, await call('getItems', keys.slice(i, i + 50)));
+        return out;
+      }
+      if (ls) {
+        const out = {};
+        for (let i = 0; i < ls.length; i++) { const k = ls.key(i); if (k && k.startsWith(P)) out[k.slice(P.length)] = ls.getItem(k); }
+        return out;
+      }
+      return { ...mem };
+    },
+    async set(k, v) {
+      if (cloud) return call('setItem', k, v);
+      if (ls) return ls.setItem(P + k, v);
+      mem[k] = v;
+    },
+    async remove(keys) {
+      if (!keys.length) return;
+      if (cloud) return call('removeItems', keys);
+      if (ls) return keys.forEach(k => ls.removeItem(P + k));
+      keys.forEach(k => delete mem[k]);
+    },
+  };
+})();
+
+// Ключи: h_<id> — привычка, l_<id>_<YYYYMM> — отметки за месяц {день: значение}
+const LOG_RE = /^l_(.+)_(\d{4})(\d{2})$/;
+
+async function load() {
+  let items = {};
+  try { items = await store.all(); } catch (e) { console.error(e); toast('Не удалось загрузить данные'); }
+  const habits = [], log = {};
+  for (const [k, v] of Object.entries(items)) {
+    if (!v) continue;
+    try {
+      if (k.startsWith('h_')) {
+        const h = JSON.parse(v);
+        if (h && h.id) habits.push(h);
+      } else {
+        const m = k.match(LOG_RE);
+        if (!m) continue;
+        const [, id, y, mo] = m;
+        log[id] = log[id] || {};
+        for (const [d, val] of Object.entries(JSON.parse(v))) log[id][`${y}-${mo}-${pad(d)}`] = val;
+      }
+    } catch (e) { console.warn('bad item', k); }
+  }
+  habits.sort((a, b) => (a.order || 0) - (b.order || 0));
+  S.habits = habits; S.log = log;
+}
+
+const dirty = new Set();
+let saveTimer = null;
+function markHabit(id) { dirty.add('h_' + id); scheduleSave(); }
+function markLog(id, k) { dirty.add(`l_${id}_${k.slice(0, 4)}${k.slice(5, 7)}`); scheduleSave(); }
+function scheduleSave() { clearTimeout(saveTimer); saveTimer = setTimeout(flush, 300); scheduleSync(); }
+async function flush() {
+  const keys = [...dirty]; dirty.clear();
+  for (const k of keys) {
+    try {
+      let val = null;
+      if (k.startsWith('h_')) {
+        const h = S.habits.find(x => x.id === k.slice(2));
+        val = h ? JSON.stringify(h) : null;
+      } else {
+        const m = k.match(LOG_RE);
+        const prefix = `${m[2]}-${m[3]}-`, obj = {};
+        for (const [d, v] of Object.entries(S.log[m[1]] || {})) if (d.startsWith(prefix) && v) obj[+d.slice(8)] = v;
+        val = Object.keys(obj).length ? JSON.stringify(obj) : null;
+      }
+      if (val === null) await store.remove([k]); else await store.set(k, val);
+    } catch (e) { console.error('save failed', k, e); dirty.add(k); }
+  }
+}
+
+/* ---------- синхронизация напоминаний с ботом ---------- */
+let syncTimer = null;
+function scheduleSync() { if (!inTG) return; clearTimeout(syncTimer); syncTimer = setTimeout(syncNow, 1500); }
+async function syncNow() {
+  const t = todayKey();
+  const reminders = S.habits.filter(h => h.remind).map(h => ({
+    id: h.id, name: h.name, emoji: h.emoji, time: h.remind, days: h.type === 'quit' ? [1, 2, 3, 4, 5, 6, 7] : h.days,
+  }));
+  const done = S.habits.filter(h => h.type !== 'quit' && success(h, t)).map(h => h.id);
+  try {
+    await fetch(API_BASE + '/api/sync', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ initData: tg.initData, tz: -new Date().getTimezoneOffset(), today: t, reminders, done }),
+    });
+  } catch (e) { /* бот недоступен — данные всё равно сохранены */ }
+}
+
+/* ---------- логика привычек ---------- */
+const val = (h, k) => (S.log[h.id] || {})[k] || 0;
+// видна ли привычка в списке на день k (для обычных разрешаем отметить и дни до создания)
+const visibleOn = (h, k) => h.type === 'quit' ? k >= h.created : h.days.includes(isoWd(k));
+// учитывается ли день в статистике
+const scheduled = (h, k) => k >= h.created && (h.type === 'quit' || h.days.includes(isoWd(k)));
+function success(h, k) {
+  const v = val(h, k);
+  if (h.type === 'quit') return k >= h.created && !v;
+  if (h.type === 'count') return v >= h.target;
+  return v >= 1;
+}
+const ratio = (h, k) => h.type === 'count' ? Math.min(1, val(h, k) / h.target) : success(h, k) ? 1 : 0;
+// сегодняшний невыполненный день ещё не провален — не считаем его
+const pending = (h, k) => k === todayKey() && h.type !== 'quit' && !success(h, k);
+
+function currentStreak(h) {
+  let k = todayKey(), n = 0;
+  if (pending(h, k)) k = addDays(k, -1);
+  for (let i = 0; i < 4000 && k >= h.created; i++) {
+    if (scheduled(h, k)) { if (success(h, k)) n++; else break; }
+    k = addDays(k, -1);
+  }
+  return n;
+}
+function bestStreak(h) {
+  const t = todayKey();
+  let k = h.created, run = 0, best = 0;
+  for (let i = 0; i < 4000 && k <= t; i++) {
+    if (scheduled(h, k) && !pending(h, k)) { if (success(h, k)) { run++; best = Math.max(best, run); } else run = 0; }
+    k = addDays(k, 1);
+  }
+  return best;
+}
+function rangeStats(h, days) { // [успешных, учтённых] за последние N дней
+  const t = todayKey(); let ok = 0, all = 0;
+  for (let i = 0; i < days; i++) {
+    const k = addDays(t, -i);
+    if (!scheduled(h, k) || pending(h, k)) continue;
+    all++; if (success(h, k)) ok++;
+  }
+  return [ok, all];
+}
+function totalDays(h) {
+  const t = todayKey(); let k = h.created, n = 0;
+  for (let i = 0; i < 4000 && k <= t; i++) { if (scheduled(h, k) && success(h, k)) n++; k = addDays(k, 1); }
+  return n;
+}
+function schedText(h) {
+  if (h.type === 'quit') return 'Каждый день';
+  const d = [...h.days].sort().join('');
+  if (d === '1234567') return 'Каждый день';
+  if (d === '12345') return 'По будням';
+  if (d === '67') return 'По выходным';
+  return h.days.slice().sort().map(x => WD[x - 1]).join(', ');
+}
+/* ---------- общая серия и заморозки (как в Duolingo) ----------
+   День засчитывается, когда выполнены все привычки этого дня — огонёк загорается.
+   Пропустил день: если есть заморозка, она тратится сама и серия сохраняется (но не растёт).
+   Заморозок нет — серия сгорает. +1 заморозка за каждые 7 дней серии, держать можно не больше 2.
+   Всё считается из истории отметок, поэтому отдельно хранить ничего не нужно. */
+const FREEZE_START = 1, FREEZE_MAX = 2, FREEZE_EVERY = 7;
+function streakSim() {
+  const t = todayKey();
+  const r = { streak: 0, best: 0, freezes: FREEZE_START, todayDone: false, status: {}, earned: {} };
+  if (!S.habits.length) return r;
+  let k = S.habits.reduce((m, h) => (h.created < m ? h.created : m), t), streak = 0;
+  for (let i = 0; i < 4000 && k <= t; i++) {
+    const hs = S.habits.filter(h => scheduled(h, k));
+    let st;
+    if (!hs.length) st = 'none';
+    else if (hs.every(h => success(h, k))) st = 'done';
+    else if (k === t) st = 'pending';
+    else if (r.freezes > 0) { r.freezes--; st = 'frozen'; }
+    else { st = 'missed'; streak = 0; }
+    if (st === 'done') {
+      streak++;
+      if (streak % FREEZE_EVERY === 0 && r.freezes < FREEZE_MAX) { r.freezes++; r.earned[k] = true; }
+    }
+    r.best = Math.max(r.best, streak);
+    r.status[k] = st;
+    k = addDays(k, 1);
+  }
+  r.streak = streak;
+  r.todayDone = r.status[t] === 'done';
+  return r;
+}
+const streakPill = sim => `<button class="streakpill${sim.todayDone ? ' on' : ''}${S.justLit ? ' lit' : ''}" data-act="streak" aria-label="Серия">
+  <span><span class="fire">🔥</span> <span class="num">${sim.streak}</span></span><span class="ice">🧊 ${sim.freezes}</span></button>`;
+function streakBanner(sim) {
+  const y = addDays(todayKey(), -1), st = sim.status[y];
+  if (st === 'frozen') return `<div class="banner ice"><i>🧊</i><div>Вчера сработала заморозка — серия <b>${dni(sim.streak)}</b> сохранена. Заморозок осталось: ${sim.freezes}.</div></div>`;
+  if (st === 'missed' && !sim.todayDone) return `<div class="banner"><i>💔</i><div>Серия прервалась, заморозок не было. Выполни всё сегодня — и огонёк загорится снова.</div></div>`;
+  return '';
+}
+const allDone = k => { const vis = S.habits.filter(h => visibleOn(h, k)); return vis.length > 0 && vis.every(h => success(h, k)); };
+
+function setVal(h, k, v) {
+  S.log[h.id] = S.log[h.id] || {};
+  if (v) S.log[h.id][k] = v; else delete S.log[h.id][k];
+  if (v && k < h.created) { h.created = k; markHabit(h.id); }
+  markLog(h.id, k);
+}
+
+/* ---------- UI: общие куски ---------- */
+function toast(msg) {
+  document.querySelectorAll('.toast').forEach(t => t.remove());
+  const el = document.createElement('div'); el.className = 'toast'; el.textContent = msg;
+  document.body.appendChild(el); setTimeout(() => el.remove(), 2200);
+}
+function ask(msg, okText = 'Удалить') {
+  return new Promise(res => {
+    const ov = document.createElement('div'); ov.className = 'modal';
+    ov.innerHTML = `<div class="sheet"><p>${esc(msg)}</p><div class="row2"><button class="btn ghost" data-r="0">Отмена</button><button class="btn danger" data-r="1">${esc(okText)}</button></div></div>`;
+    ov.addEventListener('click', e => {
+      const b = e.target.closest('[data-r]');
+      if (!b && e.target !== ov) return;
+      e.stopPropagation(); ov.remove(); res(!!b && b.dataset.r === '1');
+    });
+    document.body.appendChild(ov);
+  });
+}
+const topBar = (title, sub, right = '') => `<div class="top"><div><div class="title">${title}</div>${sub ? `<div class="sub">${sub}</div>` : ''}</div>${right}</div>`;
+const icoBox = h => `<div class="ico" style="background:${h.color}26">${esc(h.emoji)}</div>`;
+
+/* ---------- экран «Сегодня» ---------- */
+function weekStrip() {
+  const k = S.sel, t = todayKey(), mon = addDays(k, -(isoWd(k) - 1));
+  let html = '';
+  for (let i = 0; i < 7; i++) {
+    const d = addDays(mon, i), fut = d > t;
+    const vis = S.habits.filter(h => visibleOn(h, d));
+    let dot = '';
+    if (!fut && vis.length) { const r = vis.filter(h => success(h, d)).length / vis.length; dot = r >= 1 ? 'full' : S.sim.status[d] === 'frozen' ? 'ice' : r > 0 ? 'part' : ''; }
+    html += `<button class="day${d === k ? ' sel' : ''}${d === t ? ' today' : ''}" data-act="pick" data-d="${d}" ${fut ? 'disabled' : ''}>
+      <span class="wd">${WD[i]}</span><span class="dn">${parse(d).getDate()}</span><i class="dot ${dot}"></i></button>`;
+  }
+  const canNext = addDays(mon, 7) <= t;
+  return `<div class="week"><button class="arrow" data-act="week" data-d="-7" aria-label="Прошлая неделя">‹</button>
+    <div class="days">${html}</div>
+    <button class="arrow" data-act="week" data-d="7" ${canNext ? '' : 'disabled'} aria-label="Следующая неделя">›</button></div>`;
+}
+
+function habitRow(h, k) {
+  const v = val(h, k), ok = success(h, k), st = currentStreak(h);
+  let sub, ctrl;
+  if (h.type === 'check') {
+    sub = st > 1 ? `${dni(st)} подряд` : schedText(h);
+    ctrl = `<button class="chk${ok ? ' on' : ''}" style="--c:${h.color}" data-act="toggle" data-id="${h.id}" aria-label="Отметить">${ICON_CHECK}</button>`;
+  } else if (h.type === 'count') {
+    sub = `${v} из ${h.target}${h.unit ? ' ' + esc(h.unit) : ''}`;
+    const p = Math.min(100, v / h.target * 100).toFixed(1);
+    ctrl = `<div class="cnt">${v > 0 ? `<button class="mini" data-act="dec" data-id="${h.id}" aria-label="Минус">−</button>` : ''}
+      <button class="plus${ok ? ' on' : ''}" style="--c:${h.color};--p:${p}%" data-act="inc" data-id="${h.id}" aria-label="Плюс"><b>${ok ? ICON_CHECK : '+'}</b></button></div>`;
+  } else {
+    sub = v ? 'Срыв отмечен — завтра новый старт' : `${dni(st)} без срыва`;
+    ctrl = `<button class="slip${v ? ' on' : ''}" data-act="slip" data-id="${h.id}">${v ? '✕ Срыв' : 'Сорвался'}</button>`;
+  }
+  return `<div class="habit${ok && h.type !== 'quit' ? ' is-done' : ''}" data-act="open" data-id="${h.id}">
+    ${icoBox(h)}<div class="meta"><div class="name">${esc(h.name)}</div><div class="hsub">${sub}</div></div>${ctrl}</div>`;
+}
+
+function emptyState() {
+  return `<div class="empty"><div class="big">🌱</div><p>Начни с одной-двух привычек — этого достаточно.<br>Выбери готовую или создай свою.</p></div>
+    <div class="presets">${PRESETS.map((p, i) => `<button class="preset" data-act="preset" data-i="${i}"><i>${p.emoji}</i>${esc(p.name)}</button>`).join('')}</div>
+    <button class="btn" data-act="new">Своя привычка</button>`;
+}
+
+function viewToday() {
+  if (!S.habits.length) return topBar('Привычки', '') + emptyState();
+  const t = todayKey(), k = S.sel, d = parse(k);
+  const title = k === t ? 'Сегодня' : k === addDays(t, -1) ? 'Вчера' : WD_FULL[isoWd(k) - 1].replace(/^./, c => c.toUpperCase());
+  const sub = `${d.getDate()} ${MONTHS[d.getMonth()]}${k === t || k === addDays(t, -1) ? ', ' + WD_FULL[isoWd(k) - 1] : ''}`;
+  const vis = S.habits.filter(h => visibleOn(h, k));
+  const done = vis.filter(h => success(h, k)).length;
+  let body;
+  if (!vis.length) body = `<div class="rest">На этот день привычек нет 🌿</div>`;
+  else body = `<div class="card"><div class="prog">${done === vis.length ? 'Всё выполнено 🎉' : `Выполнено ${done} из ${vis.length}`}<span>${Math.round(done / vis.length * 100)}%</span></div>
+      <div class="bar-bg"><div class="bar-fg" style="width:${done / vis.length * 100}%"></div></div></div>
+      ${vis.map(h => habitRow(h, k)).join('')}`;
+  return topBar(title, sub, streakPill(S.sim)) + streakBanner(S.sim) + weekStrip() + body;
+}
+
+/* ---------- экран «Статистика» ---------- */
+function dayRatio(k) {
+  const hs = S.habits.filter(h => scheduled(h, k));
+  if (!hs.length) return null;
+  return hs.reduce((s, h) => s + ratio(h, k), 0) / hs.length;
+}
+function viewStats() {
+  if (!S.habits.length) return topBar('Статистика', '') + `<div class="empty"><div class="big">📊</div><p>Добавь привычку — здесь появится статистика.</p></div>`;
+  const t = todayKey();
+  let bars = '';
+  for (let i = 6; i >= 0; i--) {
+    const d = addDays(t, -i), r = dayRatio(d), pc = r === null ? 0 : Math.round(r * 100);
+    bars += `<div class="bar"><div class="track"><div class="bfill${pc ? '' : ' zero'}" style="height:${Math.max(pc, 3)}%"></div></div><span>${WD[isoWd(d) - 1]}</span></div>`;
+  }
+  let ok = 0, all = 0, perfect = 0;
+  for (let i = 0; i < 30; i++) {
+    const d = addDays(t, -i), hs = S.habits.filter(h => scheduled(h, d));
+    let dayOk = 0, dayAll = 0;
+    for (const h of hs) { if (pending(h, d)) continue; dayAll++; if (success(h, d)) dayOk++; }
+    ok += dayOk; all += dayAll;
+    if (hs.length && dayAll === hs.length && dayOk === dayAll) perfect++;
+  }
+  let best = 0, bestH = null;
+  for (const h of S.habits) { const b = bestStreak(h); if (b > best) { best = b; bestH = h; } }
+  // по дням недели за 8 недель
+  const wdOk = Array(7).fill(0), wdAll = Array(7).fill(0);
+  for (let i = 1; i <= 56; i++) {
+    const d = addDays(t, -i), w = isoWd(d) - 1;
+    for (const h of S.habits) if (scheduled(h, d)) { wdAll[w]++; if (success(h, d)) wdOk[w]++; }
+  }
+  const wdBars = WD.map((n, i) => { const pc = wdAll[i] ? Math.round(wdOk[i] / wdAll[i] * 100) : 0;
+    return `<div class="bar"><div class="track"><div class="bfill${pc ? '' : ' zero'}" style="height:${Math.max(pc, 3)}%;background:#34c759"></div></div><span>${n}</span></div>`; }).join('');
+  const rows = S.habits.map(h => {
+    const [o, a] = rangeStats(h, 30), pc = a ? Math.round(o / a * 100) : 0;
+    return `<div class="hrow" data-act="open" data-id="${h.id}">${icoBox(h)}
+      <div class="meta"><div class="name">${esc(h.name)}</div><div class="bar-bg"><div class="bar-fg" style="width:${pc}%;background:${h.color}"></div></div></div>
+      <div class="pct">${a ? pc + '%' : '—'}</div></div>`;
+  }).join('');
+  const where = { cloud: 'Данные хранятся в облаке Telegram', local: 'Данные хранятся в этом браузере', memory: 'Данные не сохраняются (нет хранилища)' }[store.kind];
+  return topBar('Статистика', 'за последние 30 дней') + `
+    <div class="tiles">
+      <div class="tile"><b>${all ? Math.round(ok / all * 100) + '%' : '—'}</b><span>выполнение</span></div>
+      <div class="tile"><b>${perfect}</b><span>${plural(perfect, 'идеальный день', 'идеальных дня', 'идеальных дней')}</span></div>
+      <div class="tile" style="grid-column:span 2"><b>${best ? '🔥 ' + dni(best) : '—'}</b><span>${bestH ? 'лучшая серия — ' + esc(bestH.name) : 'лучшая серия'}</span></div>
+    </div>
+    <div class="card"><h3>Последние 7 дней</h3><div class="bars">${bars}</div></div>
+    <div class="card"><h3>Привычки</h3>${rows}</div>
+    <div class="card"><h3>Дни недели · 8 недель</h3><div class="bars">${wdBars}</div></div>
+    <div class="foot">${where}</div>`;
+}
+
+/* ---------- экран привычки ---------- */
+function heatmap(h) {
+  const t = todayKey(), weeks = 18, start = addDays(t, -(isoWd(t) - 1) - (weeks - 1) * 7);
+  let cells = '';
+  for (let i = 0; i < weeks * 7; i++) {
+    const d = addDays(start, i);
+    if (d > t) { cells += '<i class="c fut"></i>'; continue; }
+    if (!scheduled(h, d)) { cells += '<i class="c off"></i>'; continue; }
+    if (h.type === 'quit' && val(h, d)) { cells += '<i class="c slipd"></i>'; continue; }
+    const r = ratio(h, d);
+    cells += r > 0 ? `<i class="c" style="background:${h.color};opacity:${(0.3 + 0.7 * r).toFixed(2)}"></i>` : '<i class="c"></i>';
+  }
+  return `<div class="heatwrap"><div class="hlabels"><span>Пн</span><span></span><span>Ср</span><span></span><span>Пт</span><span></span><span>Вс</span></div><div class="heat">${cells}</div></div>
+    <div class="legend"><span><i style="background:${h.color}"></i>${h.type === 'quit' ? 'без срыва' : 'выполнено'}</span>${h.type === 'quit' ? '<span><i style="background:var(--danger)"></i>срыв</span>' : '<span><i style="background:var(--soft)"></i>пропуск</span>'}</div>`;
+}
+function viewDetail() {
+  const h = S.habits.find(x => x.id === S.detailId);
+  if (!h) { S.view = 'main'; return viewToday(); }
+  const q = h.type === 'quit', cur = currentStreak(h), best = bestStreak(h), [o, a] = rangeStats(h, 30), tot = totalDays(h);
+  const typeText = h.type === 'count' ? `Цель: ${h.target}${h.unit ? ' ' + esc(h.unit) : ''} в день` : q ? 'Отказ от привычки' : schedText(h);
+  return `<div class="navrow"><button class="link" data-act="back">‹ Назад</button><button class="link" data-act="edit" data-id="${h.id}">Изменить</button></div>
+    <div class="hero"><div class="ico" style="background:${h.color}26">${esc(h.emoji)}</div><div class="title">${esc(h.name)}</div>
+      <div class="sub">${typeText}${h.type === 'count' ? ' · ' + schedText(h) : ''}${h.remind ? ' · 🔔 ' + h.remind : ''}</div></div>
+    <div class="tiles">
+      <div class="tile"><b>${cur}</b><span>${q ? 'дней без срыва' : 'текущая серия'}</span></div>
+      <div class="tile"><b>${best}</b><span>${q ? 'рекорд' : 'лучшая серия'}</span></div>
+      <div class="tile"><b>${a ? Math.round(o / a * 100) + '%' : '—'}</b><span>за 30 дней</span></div>
+      <div class="tile"><b>${tot}</b><span>${q ? 'чистых дней всего' : 'дней выполнено'}</span></div>
+    </div>
+    <div class="card"><h3>Последние 18 недель</h3>${heatmap(h)}</div>
+    <div class="card"><h3>Достижения</h3><div class="ach">${ACH.map(([n, e, l]) => `<div class="${best >= n ? 'got' : 'lock'}"><i>${e}</i>${l}</div>`).join('')}</div></div>
+    <button class="btn text-danger" data-act="del" data-id="${h.id}">Удалить привычку</button>`;
+}
+
+/* ---------- экран серии ---------- */
+function streakCell(sim, d, label) {
+  const t = todayKey(), st = d > t ? 'fut' : sim.status[d] || 'none';
+  const icon = { done: '🔥', frozen: '🧊', missed: '✕', pending: '', none: '', fut: '' }[st];
+  return `<div>${label ? `<div class="wd">${label}</div>` : ''}<div class="cell ${st}${d === t ? ' today' : ''}" title="${d}">${icon}</div></div>`;
+}
+function viewStreak() {
+  const sim = S.sim, t = todayKey(), on = sim.todayDone;
+  const hint = !S.habits.length ? 'Добавь привычку, чтобы начать серию.'
+    : on ? 'Огонёк на сегодня горит. Возвращайся завтра!'
+    : 'Выполни все привычки на сегодня, чтобы огонёк загорелся.';
+  const mon = addDays(t, -(isoWd(t) - 1));
+  const week = WD.map((n, i) => streakCell(sim, addDays(mon, i), n)).join('');
+  const start = addDays(mon, -28);
+  let month = '';
+  for (let i = 0; i < 35; i++) month += streakCell(sim, addDays(start, i), i < 7 ? WD[i] : '');
+  const toNext = FREEZE_EVERY - (sim.streak % FREEZE_EVERY);
+  const slots = Array.from({ length: FREEZE_MAX }, (_, i) => `<div class="slot${i < sim.freezes ? '' : ' empty'}">🧊</div>`).join('');
+  return `<div class="navrow"><button class="link" data-act="back">‹ Назад</button><span></span></div>
+    <div class="bigfire${on ? '' : ' off'}"><div class="f">🔥</div><div class="n">${sim.streak}</div>
+      <div class="l">${plural(sim.streak, 'день', 'дня', 'дней')} подряд</div><div class="h">${hint}</div></div>
+    <div class="card"><h3>Эта неделя</h3><div class="grid7">${week}</div></div>
+    <div class="card"><h3>Заморозки</h3><div class="slots">${slots}</div>
+      <div class="desc" style="margin-top:0">Если пропустишь день, заморозка сработает сама и сохранит серию. Новую даём за каждые ${FREEZE_EVERY} дней серии, держать можно не больше ${FREEZE_MAX}.</div>
+      <div class="desc"><b>${sim.freezes >= FREEZE_MAX ? 'Запас полный 💪' : `До новой заморозки: ${dni(toNext)}`}</b></div></div>
+    <div class="tiles"><div class="tile"><b>${sim.best}</b><span>рекорд серии</span></div>
+      <div class="tile"><b>${Object.values(sim.status).filter(x => x === 'frozen').length}</b><span>дней спасено заморозкой</span></div></div>
+    <div class="card"><h3>Последние 5 недель</h3><div class="grid7">${month}</div>
+      <div class="legend"><span>🔥 огонёк</span><span>🧊 заморозка</span><span>✕ пропуск</span></div></div>`;
+}
+
+/* ---------- форма ---------- */
+function openForm(h, preset) {
+  S.form = h
+    ? { ...h, days: [...h.days], target: String(h.target || 8), unit: h.unit || '', remindOn: !!h.remind, remindTime: h.remind || '21:00' }
+    : { id: null, name: '', emoji: '🎯', color: COLORS[0], type: 'check', unit: '', days: [1, 2, 3, 4, 5, 6, 7], remindOn: false, remindTime: '21:00',
+        ...(preset || {}), target: String((preset && preset.target) || 8) };
+  S.formBack = S.view;
+  S.view = 'form';
+  render();
+}
+function viewForm() {
+  const f = S.form;
+  const typeDesc = { check: 'Отмечаешь один раз в день: сделал или нет.', count: 'Набираешь число за день: стаканы, страницы, минуты.', quit: 'Отказ от чего-то. Считаются дни без срыва.' }[f.type];
+  return `<div class="navrow"><button class="link" data-act="back">‹ Отмена</button><b>${f.id ? 'Изменить' : 'Новая привычка'}</b><span style="width:70px"></span></div>
+    <div class="field"><label>Название</label><input class="inp" data-field="name" maxlength="40" placeholder="Например, зарядка" value="${esc(f.name)}"></div>
+    <div class="field"><label>Иконка</label><div class="emojis">${EMOJIS.map(e => `<button class="${f.emoji === e ? 'on' : ''}" data-act="femoji" data-v="${e}">${e}</button>`).join('')}</div></div>
+    <div class="field"><label>Цвет</label><div class="colors">${COLORS.map(c => `<button class="${f.color === c ? 'on' : ''}" style="background:${c}" data-act="fcolor" data-v="${c}" aria-label="${c}"></button>`).join('')}</div></div>
+    <div class="field"><label>Тип</label><div class="seg">
+      <button class="${f.type === 'check' ? 'on' : ''}" data-act="ftype" data-v="check">Да / нет</button>
+      <button class="${f.type === 'count' ? 'on' : ''}" data-act="ftype" data-v="count">Количество</button>
+      <button class="${f.type === 'quit' ? 'on' : ''}" data-act="ftype" data-v="quit">Отказ</button></div>
+      <div class="desc">${typeDesc}</div></div>
+    ${f.type === 'count' ? `<div class="field"><label>Цель в день</label><div class="row2">
+      <input class="inp" data-field="target" type="number" inputmode="numeric" min="1" max="999" value="${esc(f.target)}">
+      <input class="inp" data-field="unit" maxlength="16" placeholder="единица (стаканов)" value="${esc(f.unit)}"></div></div>` : ''}
+    ${f.type !== 'quit' ? `<div class="field"><label>Дни</label><div class="chips">${WD.map((n, i) => `<button class="${f.days.includes(i + 1) ? 'on' : ''}" data-act="fday" data-v="${i + 1}">${n}</button>`).join('')}</div>
+      <div class="quick"><button data-act="fdays" data-v="all">Каждый день</button><button data-act="fdays" data-v="work">Будни</button><button data-act="fdays" data-v="wknd">Выходные</button></div></div>` : ''}
+    <div class="field"><div class="switch-row"><span>🔔 Напоминание</span><button class="switch${f.remindOn ? ' on' : ''}" data-act="fremind" aria-label="Напоминание"></button></div>
+      ${f.remindOn ? `<input class="inp" style="margin-top:10px" type="time" data-field="remindTime" value="${esc(f.remindTime)}">
+      <div class="desc">Бот пришлёт сообщение в это время, если привычка ещё не отмечена.</div>` : ''}</div>
+    <button class="btn" data-act="save" style="margin-top:6px">Сохранить</button>
+    ${f.id ? `<button class="btn text-danger" data-act="del" data-id="${f.id}" style="margin-top:6px">Удалить привычку</button>` : ''}`;
+}
+function saveForm() {
+  const f = S.form, name = f.name.trim();
+  if (!name) return toast('Введи название');
+  if (f.type !== 'quit' && !f.days.length) return toast('Выбери хотя бы один день');
+  const target = parseInt(f.target, 10);
+  if (f.type === 'count' && !(target >= 1 && target <= 999)) return toast('Цель — число от 1 до 999');
+  if (f.remindOn && !/^\d{2}:\d{2}$/.test(f.remindTime)) return toast('Укажи время напоминания');
+  const data = {
+    name: name.slice(0, 40), emoji: f.emoji, color: f.color, type: f.type,
+    target: f.type === 'count' ? target : 1, unit: f.type === 'count' ? f.unit.trim().slice(0, 16) : '',
+    days: f.type === 'quit' ? [1, 2, 3, 4, 5, 6, 7] : [...f.days].sort(), remind: f.remindOn ? f.remindTime : null,
+  };
+  if (f.id) {
+    const h = S.habits.find(x => x.id === f.id);
+    Object.assign(h, data); markHabit(h.id);
+    S.view = 'detail'; S.detailId = h.id;
+  } else {
+    const h = { id: uid(), created: todayKey(), order: S.habits.reduce((m, x) => Math.max(m, x.order || 0), 0) + 1, ...data };
+    S.habits.push(h); markHabit(h.id);
+    S.view = 'main'; S.tab = 'today'; S.sel = todayKey();
+  }
+  S.form = null; hap.ok(); render();
+}
+async function deleteHabit(id) {
+  if (!await ask('Удалить привычку и всю её историю?')) return;
+  const months = new Set(Object.keys(S.log[id] || {}).map(d => d.slice(0, 4) + d.slice(5, 7)));
+  const keys = ['h_' + id, ...[...months].map(m => `l_${id}_${m}`)];
+  keys.forEach(k => dirty.delete(k));
+  S.habits = S.habits.filter(h => h.id !== id);
+  delete S.log[id];
+  try { await store.remove(keys); } catch (e) { console.error(e); }
+  S.view = 'main'; S.form = null; render(); scheduleSync();
+  toast('Привычка удалена');
+}
+
+/* ---------- навигация и рендер ---------- */
+function goBack() {
+  if (S.view === 'form') S.view = S.formBack === 'detail' && S.form && S.form.id ? 'detail' : 'main', S.form = null;
+  else if (S.view === 'detail' || S.view === 'streak') S.view = 'main';
+  render();
+}
+function tabbar() {
+  return `<nav class="tabs"><button class="${S.tab === 'today' ? 'on' : ''}" data-act="tab" data-v="today">${ICON_TODAY}Сегодня</button>
+    <button class="${S.tab === 'stats' ? 'on' : ''}" data-act="tab" data-v="stats">${ICON_STATS}Статистика</button></nav>`
+    + (S.tab === 'today' && S.habits.length ? '<button class="fab" data-act="new" aria-label="Добавить привычку">+</button>' : '');
+}
+function render() {
+  const app = document.getElementById('app');
+  const viewId = S.view === 'main' ? 'main-' + S.tab : S.view;
+  S.sim = streakSim();
+  app.innerHTML = S.view === 'streak' ? viewStreak() : S.view === 'detail' ? viewDetail() : S.view === 'form' ? viewForm() : (S.tab === 'today' ? viewToday() : viewStats()) + tabbar();
+  if (viewId !== S.lastView) { window.scrollTo(0, 0); S.lastView = viewId; }
+  if (inTG && ver('6.1')) { try { S.view === 'main' ? tg.BackButton.hide() : tg.BackButton.show(); } catch (e) {} }
+  if (S.view === 'detail') requestAnimationFrame(() => { const el = document.querySelector('.heat'); if (el) el.scrollLeft = el.scrollWidth; });
+}
+
+/* ---------- действия ---------- */
+function act(fn) { // изменение отметки с вибрацией и поздравлением
+  const before = streakSim();
+  fn(S.sel);
+  const after = streakSim(), t = todayKey();
+  if (!before.todayDone && after.todayDone) {
+    hap.ok(); S.justLit = true;
+    const extra = after.earned[t] ? ' +1 заморозка 🧊' : '';
+    setTimeout(() => toast(`🔥 Огонёк горит! ${dni(after.streak)} подряд${extra}`), 50);
+  } else hap.tap();
+  render();
+  S.justLit = false;
+}
+const H = id => S.habits.find(h => h.id === id);
+const actions = {
+  tab: el => { S.tab = el.dataset.v; render(); },
+  pick: el => { S.sel = el.dataset.d; hap.tap(); render(); },
+  week: el => { const t = todayKey(); S.sel = addDays(S.sel, +el.dataset.d); if (S.sel > t) S.sel = t; render(); },
+  toggle: (el, id) => { const h = H(id); act(k => setVal(h, k, val(h, k) ? 0 : 1)); },
+  inc: (el, id) => { const h = H(id); act(k => setVal(h, k, Math.min(999, val(h, k) + 1))); },
+  dec: (el, id) => { const h = H(id); act(k => setVal(h, k, Math.max(0, val(h, k) - 1))); },
+  slip: (el, id) => { const h = H(id); act(k => setVal(h, k, val(h, k) ? 0 : 1)); },
+  streak: () => { S.view = 'streak'; render(); },
+  open: (el, id) => { S.detailId = id; S.view = 'detail'; render(); },
+  new: () => openForm(null),
+  preset: el => openForm(null, PRESETS[+el.dataset.i]),
+  edit: (el, id) => openForm(H(id)),
+  back: () => goBack(),
+  del: (el, id) => deleteHabit(id),
+  save: () => saveForm(),
+  femoji: el => { S.form.emoji = el.dataset.v; render(); },
+  fcolor: el => { S.form.color = el.dataset.v; render(); },
+  ftype: el => { S.form.type = el.dataset.v; render(); },
+  fday: el => { const d = +el.dataset.v, a = S.form.days; S.form.days = a.includes(d) ? a.filter(x => x !== d) : [...a, d]; render(); },
+  fdays: el => { S.form.days = { all: [1, 2, 3, 4, 5, 6, 7], work: [1, 2, 3, 4, 5], wknd: [6, 7] }[el.dataset.v]; render(); },
+  fremind: () => { S.form.remindOn = !S.form.remindOn; render(); },
+};
+document.addEventListener('click', e => {
+  const el = e.target.closest('[data-act]');
+  if (!el || el.disabled) return;
+  const fn = actions[el.dataset.act];
+  if (fn) { e.preventDefault(); fn(el, el.dataset.id, e); }
+});
+document.addEventListener('input', e => { const f = e.target.dataset.field; if (f && S.form) S.form[f] = e.target.value; });
+
+/* ---------- старт ---------- */
+(async function init() {
+  await load();
+  render();
+  scheduleSync();
+  if (inTG && ver('6.1')) tg.BackButton.onClick(goBack);
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { flush(); return; }
+    if (S.lastToday !== todayKey()) { S.lastToday = todayKey(); S.sel = todayKey(); render(); scheduleSync(); }
+  });
+})();
+</script>
+</body>
+</html>
