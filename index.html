@@ -125,6 +125,20 @@ input{font:inherit;color:var(--text)}
 .mini:active{transform:scale(.85)}
 .slip{padding:10px 14px;border-radius:999px;border:1.5px solid var(--dim);color:var(--hint);font-size:13px;font-weight:800;flex:none;transition:all .25s var(--ease)}
 .slip.on{background:rgba(255,107,122,.15);border-color:var(--danger);color:var(--danger)}
+/* свайп для удаления */
+.swr{position:relative;margin-bottom:10px;border-radius:22px}
+.swr .hc{margin-bottom:0;position:relative;z-index:1;touch-action:pan-y}
+.swb{position:absolute;inset:0;border-radius:22px;background:linear-gradient(270deg,#ff4d6d,#ff6b7a 55%,rgba(255,107,122,.25));display:flex;align-items:center;justify-content:flex-end;gap:8px;padding-right:22px;color:#fff;font-weight:800;font-size:15px;opacity:0;transition:opacity .2s,background .25s}
+.swb .ic{transform:scale(calc(.75 + var(--sp,0) * .25));transition:transform .25s var(--spring)}
+.swr.swiping .swb{opacity:1}
+.swr.armed .swb{background:#ff4d6d}
+.swr.armed .swb .ic{transform:scale(1.25)}
+.swr.gone{overflow:hidden}
+.swr.nudge .hc{animation:nudge 1.2s 1s var(--ease)}
+.swr.nudge .swb{animation:peek 1.2s 1s}
+@keyframes nudge{0%,100%{transform:none}35%{transform:translateX(-64px)}65%{transform:translateX(0)}}
+@keyframes peek{0%,100%{opacity:0}20%,60%{opacity:1}}
+.hint{text-align:center;color:var(--hint);font-size:13px;font-weight:600;margin:6px 0 0}
 .rest{text-align:center;color:var(--hint);padding:24px 0;font-weight:600}
 
 /* ---------- пустое состояние ---------- */
@@ -316,7 +330,11 @@ input{font:inherit;color:var(--text)}
 .sheet .row2{display:flex;gap:8px}
 .sheet .row2 .btn{height:52px;font-size:15px}
 .sheet .row2 .btn.red{background:var(--danger);box-shadow:none}
-.toast{position:fixed;left:50%;bottom:calc(112px + env(safe-area-inset-bottom));transform:translateX(-50%);background:rgba(31,31,54,.96);border:1px solid var(--line);color:#fff;padding:12px 18px;border-radius:16px;font-size:14px;font-weight:700;z-index:60;max-width:90vw;text-align:center;animation:sheetIn .35s var(--spring);box-shadow:0 14px 30px -12px rgba(0,0,0,.6)}
+.toast.undo{display:flex;align-items:center;gap:14px;padding:10px 10px 10px 18px;overflow:hidden}
+.toast.undo button{color:var(--purple);font-weight:800;padding:8px 12px;border-radius:12px;background:rgba(122,77,255,.18);flex:none}
+.toast.undo::after{content:"";position:absolute;left:0;bottom:0;height:3px;width:100%;background:var(--grad);animation:shrink 5s linear forwards}
+@keyframes shrink{to{width:0}}
+.toast{position:fixed;left:16px;right:16px;margin:0 auto;width:fit-content;bottom:calc(112px + env(safe-area-inset-bottom));background:rgba(31,31,54,.96);border:1px solid var(--line);color:#fff;padding:12px 18px;border-radius:16px;font-size:14px;font-weight:700;z-index:60;max-width:90vw;text-align:center;animation:sheetIn .35s var(--spring);box-shadow:0 14px 30px -12px rgba(0,0,0,.6)}
 
 /* ---------- огонёк ---------- */
 .flame .fo{transform-origin:50% 100%;transform-box:fill-box;animation:flick 1.7s ease-in-out infinite}
@@ -671,8 +689,9 @@ function habitRow(h, k, i) {
   else if (h.type === 'count' && !ok) ctrl = `<div class="cntw">${v > 0 ? `<button class="mini" data-act="dec" data-id="${h.id}" aria-label="Минус">${ic('minus', 16, 2.6)}</button>` : ''}
       <button class="ck cnt${pop}" data-act="inc" data-id="${h.id}" aria-label="Плюс">${ring(50, 3.5, v / h.target, `hc${h.id}${k}`)}<i>${ic('plus', 20, 2.6)}</i></button></div>`;
   else ctrl = `<button class="ck${ok ? ' on' : ''}${pop}" data-act="${h.type === 'count' ? 'dec' : 'toggle'}" data-id="${h.id}" aria-label="Отметить">${ic('check', 22, 2.8)}</button>`;
-  return `<div class="hc st${ok && h.type !== 'quit' ? ' done' : ''}" style="--i:${i}" data-act="open" data-id="${h.id}">
-    <div class="hic" style="${tileBg(h)}">${habitIcon(h)}</div><div class="meta"><div class="nm">${esc(h.name)}</div><div class="sb">${parts.join(' · ')}</div></div>${ctrl}</div>`;
+  return `<div class="swr st${i === 5 && showSwipeHint() ? ' nudge' : ''}" style="--i:${i}"><div class="swb"><span>Удалить</span>${ic('trash', 22, 2.2)}</div>
+    <div class="hc${ok && h.type !== 'quit' ? ' done' : ''}" data-act="open" data-id="${h.id}">
+    <div class="hic" style="${tileBg(h)}">${habitIcon(h)}</div><div class="meta"><div class="nm">${esc(h.name)}</div><div class="sb">${parts.join(' · ')}</div></div>${ctrl}</div></div>`;
 }
 const PRESETS = [
   { name: 'Выпить 2 л воды', icon: 'drop', color: '#2fd4b4', type: 'count', target: 8, unit: 'стаканов' },
@@ -702,7 +721,8 @@ function viewToday() {
   if (isT && ys === 'frozen') banner = `<div class="banner ice st" style="--i:2"><div class="bi">${ic('snow', 20)}</div><div>Вчера сработала заморозка — серия <b>${dni(sim.streak)}</b> сохранена</div></div>`;
   else if (isT && ys === 'missed' && !sim.todayDone) banner = `<div class="banner miss st" style="--i:2"><div class="bi">${ic('flame', 20)}</div><div>Серия прервалась. Закрой сегодняшний день — и огонёк загорится снова</div></div>`;
   const title = isT ? 'Сегодня' : cap(`${WD[isoWd(k) - 1]}, ${dm(k)}`);
-  const list = vis.length ? vis.map((h, i) => habitRow(h, k, i + 5)).join('') : `<div class="rest">На этот день привычек нет 🌿</div>`;
+  const list = vis.length ? vis.map((h, i) => habitRow(h, k, i + 5)).join('') + (showSwipeHint() ? `<div class="hint">Свайпни привычку влево, чтобы удалить</div>` : '')
+    : `<div class="rest">На этот день привычек нет 🌿</div>`;
   return [headToday() + hero + banner + month4() + `<div class="sec st" style="--i:4"><h2>${title}</h2><span>${done} из ${vis.length}</span></div>` + list, ''];
 }
 
@@ -1002,6 +1022,7 @@ const actions = {
   rsave: () => { S.cfg = S.cfgDraft; saveCfg(); hap.ok(); toast('Напоминания сохранены'); goBack(); },
 };
 document.addEventListener('click', e => {
+  if (Date.now() - suppressClick < 400) { e.preventDefault(); e.stopPropagation(); return; }
   const el = e.target.closest('[data-act]');
   if (!el || el.disabled) return;
   const fn = actions[el.dataset.act];
@@ -1014,6 +1035,76 @@ document.addEventListener('input', e => {
 });
 document.addEventListener('change', e => { const f = e.target.dataset.field; if ((f === 'unit' || f === 'remindTime') && S.form) { S.form[f] = e.target.value; render(); } if (e.target.dataset.cfg && S.cfgDraft) { S.cfgDraft[e.target.dataset.cfg].time = e.target.value; render(); } });
 
+/* ---------- свайп влево = удалить (с отменой) ---------- */
+const HINT_KEY = 'ht_swipe_hint_done';
+function showSwipeHint() { try { return !localStorage.getItem(HINT_KEY); } catch (e) { return false; } }
+function swipeHintDone() { try { localStorage.setItem(HINT_KEY, '1'); } catch (e) {} }
+let SW = null, suppressClick = 0, pendingDel = null;
+document.addEventListener('pointerdown', e => {
+  const card = e.target.closest('.swr .hc');
+  if (!card || S.view !== 'main' || (e.pointerType === 'mouse' && e.button !== 0)) return;
+  SW = { card, wrap: card.parentElement, id: card.dataset.id, x0: e.clientX, y0: e.clientY, dx: 0, mode: null, pid: e.pointerId, armed: false };
+});
+document.addEventListener('pointermove', e => {
+  if (!SW || e.pointerId !== SW.pid) return;
+  const dx = e.clientX - SW.x0, dy = e.clientY - SW.y0;
+  if (!SW.mode) {
+    if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+    SW.mode = Math.abs(dx) > Math.abs(dy) * 1.2 && dx < 0 ? 'swipe' : 'scroll';
+    if (SW.mode !== 'swipe') { SW = null; return; }
+    try { SW.card.setPointerCapture(e.pointerId); } catch (err) {}
+    SW.card.style.transition = 'none'; SW.wrap.classList.remove('nudge'); SW.wrap.classList.add('swiping');
+  }
+  e.preventDefault();
+  const w = SW.card.offsetWidth, th = w * 0.38;
+  const d = Math.max(0, -dx);
+  SW.dx = d < th ? d : th + (d - th) * 0.85;
+  SW.card.style.transform = `translateX(${-SW.dx}px)`;
+  SW.wrap.style.setProperty('--sp', Math.min(1, SW.dx / th).toFixed(3));
+  const armed = SW.dx >= th;
+  if (armed !== SW.armed) { SW.armed = armed; SW.wrap.classList.toggle('armed', armed); hap.sel(); }
+}, { passive: false });
+function endSwipe(e) {
+  if (!SW || e.pointerId !== SW.pid) return;
+  const s = SW; SW = null;
+  if (s.mode !== 'swipe') return;
+  suppressClick = Date.now();
+  s.card.style.transition = 'transform .38s var(--ease)';
+  if (s.armed) { s.card.style.transform = 'translateX(-115%)'; hap.ok(); swipeHintDone(); removeWithUndo(s.id, s.wrap); }
+  else { s.card.style.transform = ''; s.wrap.classList.remove('armed'); setTimeout(() => s.wrap.classList.remove('swiping'), 380); }
+}
+document.addEventListener('pointerup', endSwipe);
+document.addEventListener('pointercancel', endSwipe);
+function removeWithUndo(id, wrap) {
+  commitDelete();
+  const h = H(id); if (!h) return;
+  pendingDel = { h, idx: S.habits.indexOf(h), log: S.log[id], timer: setTimeout(commitDelete, 5000) };
+  wrap.classList.add('gone');
+  wrap.style.height = wrap.offsetHeight + 'px';
+  requestAnimationFrame(() => { wrap.style.transition = 'height .32s var(--ease) .22s, margin .32s var(--ease) .22s, opacity .25s .22s'; wrap.style.height = '0px'; wrap.style.marginBottom = '0px'; wrap.style.opacity = '0'; });
+  setTimeout(() => { if (pendingDel && pendingDel.h.id === id) { S.habits = S.habits.filter(x => x.id !== id); delete S.log[id]; render(); } }, 560);
+  document.querySelectorAll('.toast').forEach(t => t.remove());
+  const t = document.createElement('div'); t.className = 'toast undo';
+  t.innerHTML = `<span>«${esc(h.name.length > 22 ? h.name.slice(0, 21) + '…' : h.name)}» удалена</span><button data-act="undo">Отменить</button>`;
+  document.body.appendChild(t); pendingDel.toast = t;
+}
+function commitDelete() {
+  if (!pendingDel) return;
+  const p = pendingDel; pendingDel = null; clearTimeout(p.timer); p.toast && p.toast.remove();
+  const id = p.h.id, months = new Set(Object.keys(p.log || {}).map(d => d.slice(0, 4) + d.slice(5, 7)));
+  const keys = ['h_' + id, ...[...months].map(m => `l_${id}_${m}`)];
+  keys.forEach(k => dirty.delete(k));
+  store.remove(keys).catch(err => console.error(err));
+  scheduleSync();
+}
+function undoDelete() {
+  if (!pendingDel) return;
+  const p = pendingDel; pendingDel = null; clearTimeout(p.timer); p.toast && p.toast.remove();
+  if (!H(p.h.id)) { S.habits.splice(Math.min(p.idx, S.habits.length), 0, p.h); if (p.log) S.log[p.h.id] = p.log; }
+  S.pulse = p.h.id; hap.tap(); S.lastView = null; render(); scheduleSync();
+}
+actions.undo = () => undoDelete();
+
 /* ---------- старт ---------- */
 (async function init() {
   await load();
@@ -1021,7 +1112,7 @@ document.addEventListener('change', e => { const f = e.target.dataset.field; if 
   scheduleSync();
   if (inTG && ver('6.1')) tg.BackButton.onClick(goBack);
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) { flush(); return; }
+    if (document.hidden) { commitDelete(); flush(); return; }
     if (S.lastToday !== todayKey()) { S.lastToday = todayKey(); S.sel = todayKey(); render(); scheduleSync(); }
   });
 })();
