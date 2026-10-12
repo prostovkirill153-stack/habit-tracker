@@ -357,6 +357,132 @@ input{font:inherit;color:var(--text)}
 .cele-t{position:relative;font-weight:800;font-size:19px;margin-top:6px}
 .cele-s{position:relative;color:var(--teal);font-weight:800;margin-top:12px}
 
+/* ---------- v2: уровни, XP, лига ---------- */
+.headr{display:flex;gap:8px;align-items:center}
+.lvchip{display:flex;align-items:center;gap:6px;height:46px;padding:0 14px 0 6px;border-radius:999px;background:var(--card);border:1px solid var(--line);font-weight:800;font-size:14px;transition:transform .2s var(--spring)}
+.lvchip:active{transform:scale(.92)}
+.lvchip .lr{position:relative;width:34px;height:34px;display:grid;place-items:center;font-family:var(--disp);font-size:14px}
+.lvchip .lr .ring{position:absolute;inset:0}
+.lvchip .lr b{position:relative}
+.chip{white-space:nowrap}
+.chips{flex-wrap:wrap}
+.chip.xp{background:#fff;color:#7a3fd6}
+.chip.xp.bump{animation:bump .5s var(--spring)}
+.upd{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:linear-gradient(90deg,rgba(122,77,255,.18),rgba(229,80,138,.12));border:1px solid rgba(164,139,255,.3);border-radius:18px;padding:11px 12px;margin-bottom:12px;font-weight:700;font-size:14px}
+.upd .nb{flex:none;font-size:11px;font-weight:800;letter-spacing:.5px;padding:4px 8px;border-radius:8px;background:var(--grad);color:#fff}
+.upd span.t{flex:1;min-width:0}
+.upd small{display:block;color:var(--hint);font-weight:600;font-size:12px;margin-top:1px}
+.upd .ic{color:var(--hint);flex:none}
+.wn h3{font-family:var(--disp);font-size:20px;margin:8px 8px 2px}
+.wn .ver{color:var(--hint);font-weight:600;font-size:13px;margin:0 8px 10px}
+.wn ul{list-style:none;margin:0 0 12px;padding:0}
+.wn li{display:flex;gap:12px;align-items:flex-start;padding:10px 8px}
+.wn li+li{border-top:1px solid var(--line)}
+.wn .wi{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;flex:none;background:rgba(122,77,255,.16);color:var(--purple)}
+.wn li b{display:block;font-weight:800}
+.wn li span{color:var(--hint);font-size:13px;font-weight:600}
+.ro-note{display:flex;gap:10px;align-items:center;background:var(--card);border:1px dashed rgba(164,139,255,.35);border-radius:16px;padding:10px 12px;margin:0 0 10px;font-size:13px;font-weight:600;color:var(--hint)}
+.ro-note .ic{color:var(--purple);flex:none}
+.ro-note button{margin-left:auto;color:var(--purple);font-weight:800;flex:none}
+.ck.ro,.slip.ro{opacity:.55;pointer-events:none}
+.mc.nb{cursor:default}
+/* таббар на 5 пунктов */
+.tabs{padding:8px 8px calc(10px + env(safe-area-inset-bottom))}
+.tab{width:auto;flex:1;max-width:84px;font-size:11px}
+.fab{flex:none;margin:-36px 6px 0}
+/* уровень */
+.lvhero{text-align:center;position:relative;padding:6px 0 4px}
+.lvring{position:relative;width:190px;height:190px;margin:0 auto}
+.lvring .ring{position:absolute;inset:0}
+.lvcore{position:absolute;inset:26px;border-radius:50%;background:var(--grad);display:grid;place-items:center;align-content:center;box-shadow:0 20px 50px -18px rgba(176,79,214,.9)}
+.lvcore small{font-weight:800;font-size:12px;letter-spacing:1.5px;opacity:.9}
+.lvcore b{font-family:var(--disp);font-size:58px;line-height:1}
+.lvhero .sk-glow{top:-30px}
+.lvt{font-family:var(--disp);font-weight:700;font-size:24px;margin-top:14px;position:relative}
+.lvs{color:var(--hint);font-weight:600;font-size:14px;position:relative}
+.lvp{display:flex;justify-content:space-between;font-weight:800;font-size:14px;margin:18px 2px 8px}
+.lvp span{color:var(--hint);font-weight:600}
+.pb.big{height:12px;border-radius:6px;margin-bottom:14px}
+.tile .gold{color:var(--gold)}
+.mchip{display:inline-flex;gap:6px;align-items:center;border-radius:999px;padding:6px 11px;font-weight:800;font-size:12px;background:rgba(255,107,122,.14);color:#ff8a95}
+.mchip.off{background:var(--soft);color:var(--hint)}
+.earn{display:flex;align-items:center;gap:12px;padding:9px 0}
+.earn .bi{width:40px;height:40px;border-radius:12px;background:var(--card2);display:grid;place-items:center;flex:none;color:var(--text)}
+.earn span{flex:1;font-weight:700}
+.earn b{font-weight:800;color:var(--gold)}
+.xrow{display:flex;align-items:center;gap:12px;padding:13px 16px}
+.xrow+.xrow{border-top:1px solid var(--line)}
+.xrow .dot{width:10px;height:10px;border-radius:50%;background:var(--c);flex:none}
+.xrow .meta b{display:block;font-weight:800}
+.xrow .meta span{color:var(--hint);font-size:12px;font-weight:600}
+.xrow .v{font-weight:800;color:var(--gold)}
+.xrow.pend .v{color:var(--hint)}
+.xrow .dash{width:12px;height:12px;border-radius:50%;border:2px dashed var(--hint);flex:none}
+.rw{position:relative;padding-left:4px}
+.fz{flex-wrap:wrap}
+.fz>div:last-child{flex:1;min-width:170px}
+.rw-i{display:flex;align-items:center;gap:14px;padding:8px 0;position:relative}
+.rw-i:not(:last-child)::after{content:"";position:absolute;left:25px;top:52px;bottom:-8px;width:2px;background:var(--line)}
+.rw-n{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;font-family:var(--disp);font-weight:700;font-size:16px;flex:none;background:var(--card2);color:var(--hint);border:2px solid var(--line);position:relative;z-index:1}
+.rw-i.got .rw-n{background:var(--grad);color:#fff;border-color:transparent}
+.rw-i.cur .rw-n{background:var(--grad);color:#fff;border-color:transparent;box-shadow:0 0 0 3px var(--bg),0 0 0 5px rgba(255,255,255,.8)}
+.rw-i.next .rw-n{border-color:var(--purple);color:var(--text)}
+.rw-i .meta{flex:1}
+.rw-i .meta b{display:block;font-weight:800}
+.rw-i .meta span{color:var(--hint);font-size:13px;font-weight:600}
+.rw-i.cur .meta span{color:var(--purple)}
+.rw-r{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;flex:none;color:var(--hint)}
+.rw-r.ok{color:var(--teal)}
+.rw-r.ice{background:rgba(90,168,255,.14);color:var(--ice)}
+/* новый уровень */
+.lvup{position:fixed;inset:0;z-index:80;background:radial-gradient(80% 50% at 50% 30%,rgba(176,79,214,.35),transparent 70%),#0a0a14;display:flex;flex-direction:column;align-items:center;padding:calc(40px + env(safe-area-inset-top)) 20px calc(20px + env(safe-area-inset-bottom));opacity:0;transition:opacity .35s}
+.lvup.show{opacity:1}
+.lvup>*:not(.conf){position:relative;z-index:1}
+.lvup .conf{position:absolute;inset:0;overflow:hidden;pointer-events:none}
+.lvup .conf i{position:absolute;width:8px;height:12px;border-radius:2px;top:-20px;animation:fall var(--t) var(--d) linear infinite}
+@keyframes fall{0%{transform:translateY(0) rotate(0)}100%{transform:translateY(110vh) rotate(540deg)}}
+.lvup .lvring{transform:scale(.4);transition:transform .8s var(--spring) .1s;margin-top:20px}
+.lvup.show .lvring{transform:none}
+.lvup .lvcore{inset:22px}
+.lvup h2{font-family:var(--disp);font-size:30px;margin:26px 0 8px;text-align:center}
+.lvup p{color:var(--hint);font-weight:600;text-align:center;margin:0 10px 22px;max-width:400px}
+.rwcard{display:flex;gap:14px;align-items:center;width:100%;max-width:440px;background:var(--card);border:1px solid var(--line);border-radius:22px;padding:14px;opacity:0;transform:translateY(16px);transition:all .5s var(--ease) .5s}
+.lvup.show .rwcard{opacity:1;transform:none}
+.rwcard .ri{width:56px;height:56px;border-radius:16px;display:grid;place-items:center;flex:none;background:linear-gradient(135deg,#8ccaff,#3b82f6);color:#fff}
+.rwcard .ri.pp{background:var(--grad)}
+.rwcard small{display:block;color:var(--ice);font-weight:800;font-size:11px;letter-spacing:1px}
+.rwcard b{display:block;font-weight:800;font-size:16px;margin:2px 0}
+.rwcard span{color:var(--hint);font-size:13px;font-weight:600}
+.lvup .acts{margin-top:auto;width:100%;max-width:560px;display:flex;flex-direction:column;gap:10px}
+/* лига */
+.lghead{display:flex;justify-content:space-between;align-items:center;padding:20px 2px 6px}
+.timer{display:flex;gap:6px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:999px;padding:8px 13px;font-weight:800;font-size:13px}
+.shields{display:flex;justify-content:center;align-items:center;gap:14px;margin:14px 0 6px}
+.shd{position:relative;display:grid;place-items:center}
+.shd.cur{filter:drop-shadow(0 12px 26px rgba(229,80,138,.55))}
+.shd.cur svg{animation:bump 1.2s var(--spring) .2s both}
+.shd .lk{position:absolute;color:#6b6b88;top:52%;transform:translateY(-50%)}
+.lgt{text-align:center;font-family:var(--disp);font-weight:700;font-size:22px;margin-top:8px}
+.lgs{text-align:center;color:var(--hint);font-weight:600;font-size:14px;margin-top:4px}
+.lghow{display:flex;gap:6px;align-items:center;justify-content:center;margin:12px auto 10px;color:var(--purple);font-weight:800;font-size:14px}
+.lrow{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:18px;margin-bottom:4px}
+.lrow .pl{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;font-weight:800;font-size:14px;flex:none;color:var(--hint)}
+.lrow .pl.g1{background:#ffc35a;color:#2a1d00}.lrow .pl.g2{background:#d5d8e4;color:#22232e}.lrow .pl.g3{background:#d98b55;color:#2a1405}
+.lrow .av{width:42px;height:42px;border-radius:50%;display:grid;place-items:center;font-weight:800;font-size:16px;color:#14141f;flex:none}
+.lrow .meta b{display:block;font-weight:800;font-size:16px}
+.lrow .meta span{color:var(--hint);font-size:12px;font-weight:600}
+.lrow .x{font-weight:800}
+.lrow.me{background:linear-gradient(90deg,rgba(122,77,255,.35),rgba(229,80,138,.18));box-shadow:inset 0 0 0 1.5px rgba(164,139,255,.7)}
+.lrow.me .av{background:var(--grad)!important;color:#fff}
+.zone{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:800;letter-spacing:.8px;margin:10px 4px 8px}
+.zone::after{content:"";flex:1;height:1px;background:currentColor;opacity:.35}
+.zone.up{color:var(--teal)}.zone.down{color:var(--danger)}
+.skel{height:62px;border-radius:18px;margin-bottom:6px;background:linear-gradient(90deg,var(--card) 25%,var(--card2) 50%,var(--card) 75%);background-size:200% 100%;animation:shimmer 1.3s infinite}
+.lgempty{text-align:center;padding:18px 10px}
+.lgempty p{color:var(--hint);font-weight:600;margin:6px 0 14px}
+/* тема «Полночь» */
+body.midnight{--grad:linear-gradient(135deg,#2563eb 0%,#0ea5e9 55%,#22d3ee 100%);--purple:#7cc4ff}
+body.midnight .hero,body.midnight .scard{box-shadow:0 22px 44px -22px rgba(14,165,233,.75)}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
 </style>
 </head>
@@ -439,6 +565,14 @@ const ICONS = {
   up: '<path d="m22 7-8.5 8.5-5-5L2 17"/><path d="M16 7h6v6"/>', down: '<path d="m22 17-8.5-8.5-5 5L2 7"/><path d="M16 17h6v-6"/>',
   edit: '<path d="M12 20h9"/><path d="M16.38 3.62a1 1 0 0 1 3 3L7.37 18.64a2 2 0 0 1-.86.5l-2.87.84a.5.5 0 0 1-.62-.62l.84-2.87a2 2 0 0 1 .5-.86z"/>',
   trash: '<path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+  trophy: '<path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6M18 9h1.5a2.5 2.5 0 0 0 0-5H18M4 22h16M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>',
+  star: '<path d="M11.5 2.3a.55.55 0 0 1 1 0l2.3 4.7a2 2 0 0 0 1.5 1.1l5.2.8a.55.55 0 0 1 .3.9l-3.8 3.7a2 2 0 0 0-.6 1.8l.9 5.2a.55.55 0 0 1-.8.6l-4.7-2.5a2 2 0 0 0-1.9 0l-4.6 2.5a.55.55 0 0 1-.8-.6l.9-5.2a2 2 0 0 0-.6-1.8L2.4 9.8a.55.55 0 0 1 .3-.9l5.2-.8a2 2 0 0 0 1.5-1.1z"/>',
+  gift: '<rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7M7.5 8a2.5 2.5 0 0 1 0-5C10 3 12 8 12 8s2-5 4.5-5a2.5 2.5 0 0 1 0 5"/>',
+  lock: '<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
+  info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>',
+  clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+  arrowup: '<path d="M12 19V5M5 12l7-7 7 7"/>', arrowdown: '<path d="M12 5v14M19 12l-7 7-7-7"/>',
+  zap: '<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>',
 };
 const ic = (n, s = 20, w = 2) => `<svg class="ic" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round">${ICONS[n] || ''}</svg>`;
 const HABIT_ICONS = ['drop', 'book', 'activity', 'leaf', 'moon', 'cup', 'pencil', 'music', 'sun', 'dumbbell', 'heart', 'ban'];
@@ -462,12 +596,32 @@ function ring(size, sw, p, k, stroke = 'url(#gR)', track = 'rgba(255,255,255,.08
     <circle data-a="ring" data-k="${k}" data-v="${p}" data-len="${c}" cx="${h}" cy="${h}" r="${r}" fill="none" stroke="${stroke}" stroke-width="${sw}" stroke-linecap="round" stroke-dasharray="${c}" stroke-dashoffset="${c * (1 - p)}" style="opacity:${p > 0 ? 1 : 0}" transform="rotate(-90 ${h} ${h})"/></svg>`;
 }
 
+/* ---------- XP, уровни, лига ---------- */
+const UPD_VER = '2.0';
+const XP_HABIT = 10, XP_DAY = 20, XP_MULT = 1.5, XP_MULT_FROM = 7;
+const LEVEL_AT = [0, 50, 150, 300, 500, 750, 1000, 1500, 2000, 2750, 3500, 4500];
+const levelStart = l => l <= LEVEL_AT.length ? LEVEL_AT[l - 1] : LEVEL_AT[LEVEL_AT.length - 1] + (l - LEVEL_AT.length) * 1000;
+function levelOf(xp) { let l = 1; while (xp >= levelStart(l + 1)) l++; return l; }
+const TITLES = ['Новичок', 'Начинающий', 'Любопытный', 'Настойчивый', 'Упорный', 'Собранный', 'Стабильный', 'Дисциплинированный', 'Несгибаемый', 'Мастер привычек', 'Легенда'];
+const titleOf = l => TITLES[Math.min(l, TITLES.length) - 1];
+const freezeCap = l => l >= 8 ? 3 : l >= 5 ? 2 : 1;
+const REWARDS = {
+  5: { icon: 'snow', ice: true, t: 'Второй слот заморозки', d: 'Теперь можно хранить до 2 заморозок' },
+  7: { icon: 'star', t: 'Титул «Стабильный»', d: 'Новое звание в профиле уровня' },
+  8: { icon: 'snow', ice: true, t: 'Третий слот заморозки', d: 'Теперь можно хранить до 3 заморозок' },
+  10: { icon: 'moon', t: 'Тема оформления «Полночь»', d: 'Включается на экране уровня' },
+  11: { icon: 'trophy', t: 'Титул «Легенда»', d: 'Высшее звание' },
+};
+const LEAGUE_COLORS = [['#ffd56a', '#f2a93b'], ['#ff9a5a', '#e5603a'], ['#9b5cff', '#e5508a'], ['#ff5a6a', '#c0263d'], ['#3fe0c0', '#1b8fd6']];
+const fmt = n => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+
 /* ---------- состояние ---------- */
 const DEF_CFG = { plan: { on: true, time: '09:00' }, save: { on: true, time: '23:00' }, week: { on: false, time: '20:00' } };
 const S = {
   habits: [], log: {}, cfg: JSON.parse(JSON.stringify(DEF_CFG)), cfgDraft: null,
   tab: 'today', view: 'main', sel: todayKey(), detailId: null, form: null, formBack: 'main', calOff: 0, statP: 'month',
   lastToday: todayKey(), lastView: null, sim: null, pulse: null,
+  td: { d: '', t: {} }, meta: { lvl: 0, upd: '', theme: '' }, league: null, leagueErr: false, leagueLoading: false,
 };
 const A = {}; // прошлые значения для анимаций
 
@@ -494,7 +648,8 @@ const store = (() => {
     async remove(keys) { if (!keys.length) return; if (cloud) return call('removeItems', keys); if (ls) return keys.forEach(k => ls.removeItem(P + k)); keys.forEach(k => delete mem[k]); },
   };
 })();
-// Ключи: h_<id> — привычка, l_<id>_<ГГГГММ> — отметки за месяц {день: значение}, cfg — общие напоминания
+// Ключи: h_<id> — привычка, l_<id>_<ГГГГММ> — отметки за месяц {день: значение}, cfg — общие напоминания,
+// td — время отметок за сегодня, meta — просмотренный уровень, версия «Что нового», тема
 const LOG_RE = /^l_(.+)_(\d{4})(\d{2})$/;
 async function load() {
   let items = {};
@@ -504,6 +659,8 @@ async function load() {
     if (!v) continue;
     try {
       if (k === 'cfg') { const c = JSON.parse(v); for (const n of Object.keys(DEF_CFG)) if (c[n]) S.cfg[n] = { ...DEF_CFG[n], ...c[n] }; }
+      else if (k === 'td') { const x = JSON.parse(v); if (x && x.d) S.td = { d: x.d, t: x.t || {} }; }
+      else if (k === 'meta') { S.meta = { ...S.meta, ...JSON.parse(v) }; }
       else if (k.startsWith('h_')) { const h = JSON.parse(v); if (h && h.id) habits.push(h); }
       else { const m = k.match(LOG_RE); if (!m) continue; const [, id, y, mo] = m; log[id] = log[id] || {}; for (const [d, x] of Object.entries(JSON.parse(v))) log[id][`${y}-${mo}-${pad(d)}`] = x; }
     } catch (e) { console.warn('bad item', k); }
@@ -516,6 +673,7 @@ let saveTimer = null;
 function markHabit(id) { dirty.add('h_' + id); scheduleSave(); }
 function markLog(id, k) { dirty.add(`l_${id}_${k.slice(0, 4)}${k.slice(5, 7)}`); scheduleSave(); }
 function saveCfg() { dirty.add('cfg'); scheduleSave(); }
+function saveMeta() { dirty.add('meta'); scheduleSave(); }
 function scheduleSave() { clearTimeout(saveTimer); saveTimer = setTimeout(flush, 300); scheduleSync(); }
 async function flush() {
   const keys = [...dirty]; dirty.clear();
@@ -523,6 +681,8 @@ async function flush() {
     try {
       let v = null;
       if (k === 'cfg') v = JSON.stringify(S.cfg);
+      else if (k === 'meta') v = JSON.stringify(S.meta);
+      else if (k === 'td') v = JSON.stringify(S.td);
       else if (k.startsWith('h_')) { const h = S.habits.find(x => x.id === k.slice(2)); v = h ? JSON.stringify(h) : null; }
       else {
         const m = k.match(LOG_RE), pre = `${m[2]}-${m[3]}-`, obj = {};
@@ -552,7 +712,8 @@ async function syncNow() {
   try {
     await fetch(API_BASE + '/api/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ initData: tg.initData, tz: -new Date().getTimezoneOffset(), today: t, habits, done,
-        streak: sim.streak, todayDone: sim.todayDone, cfg: S.cfg, week: { ok, all } }) });
+        streak: sim.streak, todayDone: sim.todayDone, cfg: S.cfg, week: { ok, all },
+        xp: { days: Object.fromEntries(Array.from({ length: 8 }, (_, i) => addDays(t, -i)).map(d => [d, sim.dayXp[d] || 0])), total: sim.xp, level: sim.level } }) });
   } catch (e) { /* бот недоступен — данные всё равно сохранены */ }
 }
 
@@ -590,34 +751,49 @@ function timeSel(v, attr) {
 }
 const remindText = h => !h.remind ? 'выкл' : h.every ? `каждые ${h.every} ч` : h.remind;
 function setVal(h, k, v) {
+  if (k !== todayKey()) return false; // честная серия: отмечать можно только сегодня
   S.log[h.id] = S.log[h.id] || {};
   if (v) S.log[h.id][k] = v; else delete S.log[h.id][k];
-  if (v && k < h.created) { h.created = k; markHabit(h.id); }
   markLog(h.id, k);
+  if (S.td.d !== k) S.td = { d: k, t: {} };
+  const ok = success(h, k) && h.type !== 'quit', n = new Date();
+  if (ok && !S.td.t[h.id]) S.td.t[h.id] = `${pad(n.getHours())}:${pad(n.getMinutes())}`;
+  if (!ok) delete S.td.t[h.id];
+  dirty.add('td');
+  return true;
 }
 
-/* ---------- общая серия и заморозки (как в Duolingo) ----------
+/* ---------- общая серия, заморозки, XP и уровни ----------
    День засчитывается, когда выполнены все привычки этого дня. Пропуск закрывает заморозка (серия сохраняется, но не растёт);
-   без заморозок серия сгорает. +1 заморозка за каждые 7 дней серии, максимум 2, на старте 1. */
-const FREEZE_START = 1, FREEZE_MAX = 2, FREEZE_EVERY = 7;
+   без заморозок серия сгорает. +1 заморозка за каждые 7 дней серии. Слотов: 1, с 5 уровня — 2, с 8 — 3.
+   XP: +10 за выполненную привычку (за «отказ» — в конце чистого дня), +20 за закрытый день, ×1,5 при серии от 7 дней.
+   Всё считается из истории отметок, поэтому XP нельзя «накрутить» отдельно от привычек. */
+const FREEZE_START = 1, FREEZE_EVERY = 7;
 function streakSim() {
-  const t = todayKey(), r = { streak: 0, best: 0, freezes: FREEZE_START, todayDone: false, status: {}, earned: {} };
+  const t = todayKey(), r = { streak: 0, best: 0, freezes: FREEZE_START, todayDone: false, status: {}, earned: {}, xp: 0, dayXp: {}, level: 1, cap: 1, mult: 1, first: t };
   if (!S.habits.length) return r;
   let k = S.habits.reduce((m, h) => (h.created < m ? h.created : m), t), streak = 0;
+  r.first = k;
   for (let i = 0; i < 4000 && k <= t; i++) {
-    const hs = S.habits.filter(h => scheduled(h, k));
+    const hs = S.habits.filter(h => scheduled(h, k)), mult = streak >= XP_MULT_FROM ? XP_MULT : 1;
     let st;
     if (!hs.length) st = 'none';
     else if (hs.every(h => success(h, k))) st = 'done';
     else if (k === t) st = 'pending';
     else if (r.freezes > 0) { r.freezes--; st = 'frozen'; }
     else { st = 'missed'; streak = 0; }
-    if (st === 'done') { streak++; if (streak % FREEZE_EVERY === 0 && r.freezes < FREEZE_MAX) { r.freezes++; r.earned[k] = true; } }
+    const n = hs.filter(h => success(h, k) && (h.type !== 'quit' || k < t)).length;
+    const dx = Math.round((n * XP_HABIT + (st === 'done' ? XP_DAY : 0)) * mult);
+    if (dx) { r.dayXp[k] = dx; r.xp += dx; }
+    if (k === t) r.mult = mult;
+    r.level = levelOf(r.xp); r.cap = freezeCap(r.level);
+    if (st === 'done') { streak++; if (streak % FREEZE_EVERY === 0 && r.freezes < r.cap) { r.freezes++; r.earned[k] = true; } }
     r.best = Math.max(r.best, streak); r.status[k] = st; k = addDays(k, 1);
   }
   r.streak = streak; r.todayDone = r.status[t] === 'done';
   return r;
 }
+function weekXp(sim) { const t = todayKey(), mon = addDays(t, -(isoWd(t) - 1)); let s = 0; for (let d = mon; d <= t; d = addDays(d, 1)) s += sim.dayXp[d] || 0; return s; }
 
 /* ---------- всплывающие ---------- */
 function toast(msg) {
@@ -658,7 +834,12 @@ function greeting() { const h = new Date().getHours(); return h < 5 ? 'Добр�
 function headToday() {
   const t = todayKey(), d = parse(t);
   return `<div class="head st" style="--i:0"><div><div class="date">${cap(WD_FULL[isoWd(t) - 1])}, ${d.getDate()} ${MONTHS[d.getMonth()]}</div>
-    <h1 class="h1">${greeting()}</h1></div><button class="iconbtn" data-act="reminders" aria-label="Напоминания">${ic('bell', 20)}</button></div>`;
+    <h1 class="h1">${greeting()}</h1></div><div class="headr">${lvChip()}<button class="iconbtn" data-act="reminders" aria-label="Напоминания">${ic('bell', 20)}</button></div></div>`
+    + (S.meta.upd !== UPD_VER ? `<button class="upd st" style="--i:1" data-act="whatsnew"><span class="nb">NEW</span><span class="t">Обновление ${UPD_VER}: лига, уровни и XP<small>Нажми, чтобы узнать, что нового</small></span>${ic('right', 18, 2.4)}</button>` : '');
+}
+function lvChip() {
+  const sim = S.sim, l = sim.level, p = (sim.xp - levelStart(l)) / (levelStart(l + 1) - levelStart(l));
+  return `<button class="lvchip" data-act="level" aria-label="Уровень"><span class="lr">${ring(34, 3.5, p, 'lvchip')}<b>${l}</b></span>Ур.</button>`;
 }
 function dayVis(d) { const vis = S.habits.filter(h => visibleOn(h, d)); return { vis, r: vis.length ? vis.reduce((s, h) => s + ratio(h, d), 0) / vis.length : 0 }; }
 function month4() {
@@ -689,6 +870,7 @@ function habitRow(h, k, i) {
   else if (h.type === 'count' && !ok) ctrl = `<div class="cntw">${v > 0 ? `<button class="mini" data-act="dec" data-id="${h.id}" aria-label="Минус">${ic('minus', 16, 2.6)}</button>` : ''}
       <button class="ck cnt${pop}" data-act="inc" data-id="${h.id}" aria-label="Плюс">${ring(50, 3.5, v / h.target, `hc${h.id}${k}`)}<i>${ic('plus', 20, 2.6)}</i></button></div>`;
   else ctrl = `<button class="ck${ok ? ' on' : ''}${pop}" data-act="${h.type === 'count' ? 'dec' : 'toggle'}" data-id="${h.id}" aria-label="Отметить">${ic('check', 22, 2.8)}</button>`;
+  if (k !== todayKey()) ctrl = ctrl.replace(/<button /g, '<button disabled ').replace(/class="(ck|slip)/g, 'class="$1 ro');
   return `<div class="swr st${i === 5 && showSwipeHint() ? ' nudge' : ''}" style="--i:${i}"><div class="swb"><span>Удалить</span>${ic('trash', 22, 2.2)}</div>
     <div class="hc${ok && h.type !== 'quit' ? ' done' : ''}" data-act="open" data-id="${h.id}">
     <div class="hic" style="${tileBg(h)}">${habitIcon(h)}</div><div class="meta"><div class="nm">${esc(h.name)}</div><div class="sb">${parts.join(' · ')}</div></div>${ctrl}</div></div>`;
@@ -710,20 +892,23 @@ function viewToday() {
   const t = todayKey(), k = S.sel, sim = S.sim, isT = k === t;
   const { vis } = dayVis(k), done = vis.filter(h => success(h, k)).length, p = vis.length ? done / vis.length : 0, pc = Math.round(p * 100);
   const sub = !vis.length ? 'На этот день привычек нет' : done === vis.length ? (isT ? 'День закрыт — так держать' : 'День был закрыт')
-    : isT ? `Осталось ${vis.length - done} — огонёк ждёт` : 'Можно отметить задним числом';
+    : isT ? `Осталось ${vis.length - done} — огонёк ждёт` : 'Прошедший день — только просмотр';
+  const xpT = sim.dayXp[t] || 0;
   const hero = `<div class="hero st" style="--i:1"><div class="hero-ring">${ring(124, 12, p, 'hero', '#fff', 'rgba(255,255,255,.22)')}
       <div class="hero-pct"><span data-c="${pc}" data-k="heropct" data-suf="%">${pc}%</span></div></div>
     <div class="hero-txt"><div class="hero-l">${isT ? 'Прогресс дня' : cap(dm(k))}</div><div class="hero-n">${done} из ${vis.length}</div><div class="hero-s">${sub}</div>
       <div class="chips"><button class="chip" data-act="streak">${ic('flame', 15, 2.4)}<span data-c="${sim.streak}" data-k="chipS">${sim.streak}</span></button>
-      <button class="chip" data-act="streak">${ic('snow', 15, 2.4)}${sim.freezes}</button></div></div></div>`;
+      <button class="chip" data-act="streak">${ic('snow', 15, 2.4)}${sim.freezes}</button>
+      ${isT ? `<button class="chip xp${S.pulse && xpT ? ' bump' : ''}" data-act="level">+${fmt(xpT)} XP</button>` : ''}</div></div></div>`;
   let banner = '';
   const y = addDays(t, -1), ys = sim.status[y];
   if (isT && ys === 'frozen') banner = `<div class="banner ice st" style="--i:2"><div class="bi">${ic('snow', 20)}</div><div>Вчера сработала заморозка — серия <b>${dni(sim.streak)}</b> сохранена</div></div>`;
   else if (isT && ys === 'missed' && !sim.todayDone) banner = `<div class="banner miss st" style="--i:2"><div class="bi">${ic('flame', 20)}</div><div>Серия прервалась. Закрой сегодняшний день — и огонёк загорится снова</div></div>`;
   const title = isT ? 'Сегодня' : cap(`${WD[isoWd(k) - 1]}, ${dm(k)}`);
+  const ro = isT ? '' : `<div class="ro-note">${ic('lock', 18, 2.2)}<span>Прошлые дни только для просмотра — отмечать можно сегодня</span><button data-act="pick" data-d="${t}">К сегодня</button></div>`;
   const list = vis.length ? vis.map((h, i) => habitRow(h, k, i + 5)).join('') + (showSwipeHint() ? `<div class="hint">Свайпни привычку влево, чтобы удалить</div>` : '')
     : `<div class="rest">На этот день привычек нет 🌿</div>`;
-  return [headToday() + hero + banner + month4() + `<div class="sec st" style="--i:4"><h2>${title}</h2><span>${done} из ${vis.length}</span></div>` + list, ''];
+  return [headToday() + hero + banner + month4() + `<div class="sec st" style="--i:4"><h2>${title}</h2><span>${done} из ${vis.length}</span></div>` + ro + list, ''];
 }
 
 /* ---------- экран привычки ---------- */
@@ -748,7 +933,7 @@ function viewDetail() {
     if (q) cls = v ? 'slip' : (d >= h.created ? 'done' : '');
     else if (ok) cls = 'done';
     else if (h.type === 'count' && v > 0) { cls = 'part'; sty += `;--p:${Math.round(v / h.target * 100)}%`; }
-    cells += `<button class="mc ${cls}${d === t ? ' today' : ''}" style="${sty}" data-act="calday" data-id="${h.id}" data-d="${d}">${n}</button>`;
+    cells += `<div class="mc nb ${cls}${d === t ? ' today' : ''}" style="${sty}">${n}</div>`;
   }
   const v = val(h, t), okT = success(h, t), visT = visibleOn(h, t);
   let bb;
@@ -877,27 +1062,168 @@ function viewStreak() {
     const cls = st === 'frozen' ? 'ice' : st === 'missed' ? 'miss' : '';
     week += `<div><div class="c ${cls}${d === t ? ' today' : ''}">${inner}</div><span class="${d === t ? 't' : ''}">${WD[i]}</span></div>`;
   }
-  const full = sim.freezes >= FREEZE_MAX, prog = sim.streak % FREEZE_EVERY, toNext = FREEZE_EVERY - prog;
-  const slots = Array.from({ length: FREEZE_MAX }, (_, i) => i < sim.freezes ? `<div class="fz-s on">${ic('snow', 28, 2.2)}</div>` : `<div class="fz-s off">${ic('plus', 22, 2.2)}</div>`).join('');
+  const full = sim.freezes >= sim.cap, prog = sim.streak % FREEZE_EVERY, toNext = FREEZE_EVERY - prog;
+  const slots = Array.from({ length: sim.cap }, (_, i) => i < sim.freezes ? `<div class="fz-s on">${ic('snow', 28, 2.2)}</div>` : `<div class="fz-s off">${ic('plus', 22, 2.2)}</div>`).join('');
   const pill = !S.habits.length ? '' : on ? `<div class="pill ok">${ic('check', 16, 2.8)}Сегодня огонёк уже горит</div>` : `<div class="pill wait">${ic('flame', 16, 2.4)}Закрой все привычки, чтобы зажечь</div>`;
-  const body = `<div class="nav"><button class="back" data-act="back">${ic('left', 20, 2.4)}Назад</button><span class="navnote">Рекорд — ${dni(sim.best)}</span></div>
+  const capNote = sim.cap < 3 ? ` Больше слотов — на ${sim.cap < 2 ? 5 : 8} уровне.` : '';
+  const body = `<div class="lghead st" style="--i:0"><h1 class="h1" style="font-size:28px;margin:0">Серия</h1><span class="navnote">Рекорд — ${dni(sim.best)}</span></div>
     <div class="sk st" style="--i:0"><div class="sk-glow"></div>${flame(120, on ? '' : 'off')}<div class="sk-n" data-c="${sim.streak}" data-k="skn">${sim.streak}</div>
       <div class="sk-l">${plural(sim.streak, 'день', 'дня', 'дней')} подряд</div>${pill}</div>
     <div class="card st" style="--i:1"><div class="card-h"><b>Эта неделя</b><span>${wDone} из ${wPast}</span></div><div class="wk">${week}</div>
       <div class="small">Пропущенный день, спасённый заморозкой, отмечается здесь голубой снежинкой.</div></div>
-    <div class="card st" style="--i:2"><div class="fz">${slots}<div><b>Заморозки: ${sim.freezes} из ${FREEZE_MAX}</b><span>Пропустишь день — заморозка сработает сама</span></div></div>
-      <div class="fzp"><span>${full ? 'Запас полный 💪' : `Новая заморозка через ${dni(toNext)}`}</span><em>${full ? `${FREEZE_MAX} / ${FREEZE_MAX}` : `${prog} / ${FREEZE_EVERY}`}</em></div>
+    <div class="card st" style="--i:2"><div class="fz">${slots}<div><b>Заморозки: ${sim.freezes} из ${sim.cap}</b><span>Пропустишь день — заморозка сработает сама</span></div></div>
+      <div class="fzp"><span>${full ? 'Запас полный 💪' : `Новая заморозка через ${dni(toNext)}`}</span><em>${full ? `${sim.cap} / ${sim.cap}` : `${prog} / ${FREEZE_EVERY}`}</em></div>
       <div class="pb ice"><i data-a="w" data-k="fzp" data-v="${full ? 1 : prog / FREEZE_EVERY}"></i></div>
-      <div class="small">Каждые ${FREEZE_EVERY} дней серии дают одну заморозку, храниться могут максимум ${FREEZE_MAX}.</div></div>`;
-  return [body, `<div class="bbar"><button class="btn" data-act="share">${ic('share', 20, 2.4)}Поделиться серией</button></div>`];
+      <div class="small">Каждые ${FREEZE_EVERY} дней серии дают одну заморозку, слотов сейчас: ${sim.cap}.${capNote}</div></div>
+    <button class="btn st" style="--i:3;margin-bottom:8px" data-act="share">${ic('share', 20, 2.4)}Поделиться серией</button>`;
+  return [body, ''];
 }
-async function shareStreak() {
-  const n = S.sim.streak, text = `🔥 Моя серия в трекере привычек — ${dni(n)} подряд! Присоединяйся`;
+function shareStreak() { shareText(`🔥 Моя серия в трекере привычек — ${dni(S.sim.streak)} подряд! Присоединяйся`); }
+
+/* ---------- экран уровня ---------- */
+function viewLevel() {
+  const sim = S.sim, l = sim.level, s0 = levelStart(l), s1 = levelStart(l + 1), into = sim.xp - s0, need = s1 - s0, t = todayKey();
+  const xpT = sim.dayXp[t] || 0, m = sim.mult, mtxt = m > 1 ? ' × 1,5' : '';
+  const done = S.habits.filter(h => visibleOn(h, t) && h.type !== 'quit' && success(h, t));
+  const left = S.habits.filter(h => visibleOn(h, t) && !success(h, t)).length;
+  let rows = done.map(h => `<div class="xrow" style="--c:${h.color}"><i class="dot"></i><div class="meta" style="flex:1"><b>${esc(h.name)}</b>
+      <span>${XP_HABIT}${mtxt}${S.td.d === t && S.td.t[h.id] ? ' · ' + S.td.t[h.id] : ''}</span></div><span class="v">+${Math.round(XP_HABIT * m)}</span></div>`).join('');
+  rows += sim.todayDone
+    ? `<div class="xrow"><span class="dash" style="border-style:solid;border-color:var(--gold);background:var(--gold)"></span><div class="meta" style="flex:1"><b>Бонус за закрытый день</b><span>получен</span></div><span class="v">+${Math.round(XP_DAY * m)}</span></div>`
+    : `<div class="xrow pend"><span class="dash"></span><div class="meta" style="flex:1"><b>Бонус за закрытый день</b><span>${S.habits.length ? `осталось ${left} ${plural(left, 'привычка', 'привычки', 'привычек')}` : 'добавь привычку'}</span></div><span class="v">+${Math.round(XP_DAY * m)}</span></div>`;
+  const lvls = Object.keys(REWARDS).map(Number).sort((a, b) => a - b), nextL = lvls.find(x => x > l);
+  const rw = lvls.map(x => {
+    const r = REWARDS[x], st = x < l ? 'got' : x === l ? 'cur' : x === nextL ? 'next' : 'lock';
+    const sub = st === 'got' ? 'получено' : st === 'cur' ? 'текущий уровень' : st === 'next' ? `через ${fmt(levelStart(x) - sim.xp)} XP` : `на ${x} уровне`;
+    let right = st === 'got' ? `<span class="rw-r ok">${ic('check', 22, 2.6)}</span>` : st === 'next' ? `<span class="rw-r${r.ice ? ' ice' : ''}">${ic(r.icon, 20, 2.2)}</span>` : st === 'lock' ? `<span class="rw-r">${ic('lock', 18, 2.2)}</span>` : '';
+    if (x === 10 && l >= 10) right = `<button class="sw${S.meta.theme === 'midnight' ? ' on' : ''}" data-act="theme" aria-label="Тема «Полночь»"></button>`;
+    return `<div class="rw-i ${st}"><span class="rw-n">${x}</span><div class="meta"><b>${r.t}</b><span>${sub}</span></div>${right}</div>`;
+  }).join('');
+  const place = S.league && S.league.place ? [S.league.place, 'место'] : ['—', ''];
+  const body = `<div class="nav"><button class="back" data-act="back">${ic('left', 20, 2.4)}Назад</button><button class="navnote" data-act="lvpreview">Превью повышения</button></div>
+    <div class="lvhero st" style="--i:0"><div class="sk-glow"></div><div class="lvring">${ring(190, 12, into / need, 'lvbig')}<div class="lvcore"><small>УРОВЕНЬ</small><b>${l}</b></div></div>
+      <div class="lvt">${titleOf(l)}</div><div class="lvs">Всего <span data-c="${sim.xp}" data-k="lvtot">${fmt(sim.xp)}</span> XP</div></div>
+    <div class="st" style="--i:1"><div class="lvp">${fmt(into)} / ${fmt(need)} XP<span>ещё ${fmt(s1 - sim.xp)} XP до уровня ${l + 1}</span></div>
+      <div class="pb big"><i data-a="w" data-k="lvbar" data-v="${into / need}" style="background:var(--grad)"></i></div></div>
+    <div class="t3 st" style="--i:2"><div class="tile"><b class="gold">+${fmt(xpT)}</b><span>XP сегодня</span></div>
+      <div class="tile"><b>${fmt(weekXp(sim))}</b><span>за неделю</span></div><div class="tile"><b>${place[0]}${place[1] ? ' ' + place[1] : ''}</b><span>в лиге</span></div></div>
+    <div class="card st" style="--i:3"><div class="card-h"><b>Как заработать XP</b><span class="mchip${m > 1 ? '' : ' off'}">${ic('flame', 13, 2.4)}${m > 1 ? '×1,5 активен' : '×1,5 с 7 дней серии'}</span></div>
+      <div class="earn"><span class="bi">${ic('check', 18, 2.6)}</span><span>Отметить привычку</span><b>+${XP_HABIT}</b></div>
+      <div class="earn"><span class="bi">${ic('cal', 18, 2.2)}</span><span>Закрыть день — все привычки</span><b>+${XP_DAY}</b></div>
+      <div class="earn"><span class="bi">${ic('flame', 18, 2.2)}</span><span>Серия от ${XP_MULT_FROM} дней</span><b>×1,5</b></div></div>
+    <div class="sec st" style="--i:4"><h2>Сегодня</h2><span>+${fmt(xpT)} XP</span></div><div class="grp st" style="--i:4">${rows}</div>
+    <div class="sec st" style="--i:5"><h2>Награды за уровни</h2></div><div class="rw st" style="--i:5">${rw}</div>`;
+  return [body, ''];
+}
+function levelUp(l, preview) {
+  const sim = S.sim, rw = REWARDS[l] || { icon: 'star', t: `Титул «${titleOf(l)}»`, d: 'Новое звание за упорство' };
+  const days = Math.max(1, Math.round((parse(todayKey()) - parse(sim.first)) / 864e5) + 1);
+  const cols = ['#ffb04a', '#f0507e', '#8b4dff', '#3fd6ab', '#5aa8ff', '#ffd56a'];
+  let conf = '';
+  if (!REDUCE) for (let i = 0; i < 26; i++) conf += `<i style="left:${(Math.random() * 100).toFixed(1)}%;background:${cols[i % cols.length]};--t:${(3 + Math.random() * 3).toFixed(2)}s;--d:${(-Math.random() * 5).toFixed(2)}s"></i>`;
+  const ov = document.createElement('div'); ov.className = 'lvup';
+  ov.innerHTML = `<div class="conf">${conf}</div><div class="lvring" style="width:200px;height:200px">${ring(200, 10, 1, 'lvup' + l)}<div class="lvcore"><small>УРОВЕНЬ</small><b>${l}</b></div></div>
+    <h2>${preview ? `Уровень ${l} — уже скоро` : 'Новый уровень!'}</h2>
+    <p>${preview ? `Ещё ${fmt(levelStart(l) - sim.xp)} XP — и откроется награда.` : `${fmt(sim.xp)} XP за ${dni(days)}. Привычки держатся — так держать.`}</p>
+    <div class="rwcard"><span class="ri${rw.ice ? '' : ' pp'}">${ic(rw.icon, 26, 2.2)}</span><div><small>НАГРАДА</small><b>${rw.t}</b><span>${rw.d}</span></div></div>
+    <div class="acts"><button class="btn" data-lv="ok">${preview ? 'Понятно' : 'Забрать награду'}</button>${preview ? '' : `<button class="btn dark" data-lv="share">${ic('share', 20, 2.4)}Поделиться в чате</button>`}</div>`;
+  document.body.appendChild(ov);
+  requestAnimationFrame(() => requestAnimationFrame(() => ov.classList.add('show')));
+  if (!preview) hap.ok();
+  ov.addEventListener('click', e => {
+    const b = e.target.closest('[data-lv]'); if (!b) return;
+    if (b.dataset.lv === 'share') shareText(`⭐ У меня ${l} уровень в трекере привычек — «${titleOf(l)}»! Присоединяйся`);
+    ov.classList.remove('show'); setTimeout(() => ov.remove(), 350);
+  });
+}
+function whatsNew() {
+  const items = [
+    ['trophy', 'Лига', 'Соревнуйся с другими по XP за неделю. Топ-5 группы переходят в лигу выше.'],
+    ['star', 'Уровни и XP', '+10 XP за привычку, +20 за закрытый день, ×1,5 при серии от 7 дней.'],
+    ['gift', 'Награды за уровни', 'Слоты заморозок, титулы и тема оформления «Полночь».'],
+    ['lock', 'Честная серия', 'Отмечать привычки можно только в тот же день. Прошлые дни — только просмотр.'],
+    ['snow', 'Заморозки по уровням', 'Сначала 1 слот, с 5 уровня — 2, с 8 уровня — 3.'],
+  ];
+  overlay(`<div class="wn"><h3>Что нового</h3><div class="ver">Версия ${UPD_VER}</div><ul>${items.map(([i, b, t]) => `<li><span class="wi">${ic(i, 20, 2.2)}</span><div><b>${b}</b><span>${t}</span></div></li>`).join('')}</ul></div>
+    <button class="btn" data-r="ok">Понятно</button>`, () => { if (S.meta.upd !== UPD_VER) { S.meta.upd = UPD_VER; saveMeta(); render(); } });
+}
+
+/* ---------- экран лиги ---------- */
+function shield(tier, size, state) {
+  const [a, b] = LEAGUE_COLORS[tier - 1], id = `sh${tier}${state}${size}`;
+  const lock = state === 'lock';
+  return `<div class="shd ${state}"><svg width="${size}" height="${Math.round(size * 1.12)}" viewBox="0 0 50 56">
+    <defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${a}"/><stop offset="1" stop-color="${b}"/></linearGradient></defs>
+    <path d="M25 2 46 9v17c0 14-9 23-21 28C13 49 4 40 4 26V9z" fill="${lock ? '#22223a' : `url(#${id})`}" stroke="${lock ? '#33334f' : 'rgba(255,255,255,.35)'}" stroke-width="1.5"/>
+    ${lock ? '' : '<path d="M25 15c2 5 9 8 9 17a9 9 0 0 1-18 0c0-4 2-7 4.5-9 .4 2.6 1.6 4.2 3.4 5 0-4.6-.6-8.6 1.1-13z" fill="rgba(255,255,255,.92)"/>'}</svg>
+    ${lock ? `<span class="lk">${ic('lock', Math.round(size * .34), 2.2)}</span>` : ''}</div>`;
+}
+function leftText(end) {
+  const ms = Math.max(0, end * 1000 - Date.now()), h = Math.floor(ms / 36e5), d = Math.floor(h / 24);
+  return d ? `${d} дн ${h % 24} ч` : h ? `${h} ч ${Math.floor(ms / 6e4) % 60} мин` : `${Math.floor(ms / 6e4)} мин`;
+}
+const AV_COLORS = ['#ffc35a', '#2fd4b4', '#5aa8ff', '#f477c6', '#a78bfa', '#ff6b6b', '#ff9a5a'];
+const avColor = n => AV_COLORS[[...n].reduce((a, c) => a + c.charCodeAt(0), 0) % AV_COLORS.length];
+function viewLeague() {
+  const L = S.league;
+  const head = `<div class="lghead st" style="--i:0"><h1 class="h1" style="font-size:28px;margin:0">Лига</h1>${L ? `<div class="timer">${ic('clock', 15, 2.4)}${leftText(L.end)}</div>` : ''}</div>`;
+  if (!inTG) return [head + `<div class="card st lgempty" style="--i:1">${shield(3, 72, 'cur')}<h3 class="disp" style="margin:12px 0 0">Лига работает в Telegram</h3><p>Открой трекер через бота — там ты соревнуешься с другими по XP за неделю.</p></div>`, ''];
+  if (!L) return [head + (S.leagueErr
+    ? `<div class="card lgempty"><p>Не удалось загрузить лигу</p><button class="btn" data-act="lgretry">Повторить</button></div>`
+    : Array.from({ length: 6 }, () => '<div class="skel"></div>').join('')), ''];
+  const tier = L.tier, names = L.leagues, me = L.rows.find(r => r.me), place = L.place;
+  const shields = names.map((_, i) => shield(i + 1, i + 1 === tier ? 86 : 46, i + 1 < tier ? 'got' : i + 1 === tier ? 'cur' : 'lock')).join('');
+  let rows = '';
+  L.rows.forEach((r, i) => {
+    if (L.demoteFrom !== null && L.demoteFrom !== undefined && i === L.demoteFrom) rows += `<div class="zone down">${ic('arrowdown', 14, 2.6)}ЗОНА ПОНИЖЕНИЯ</div>`;
+    let sub = '';
+    if (r.me) sub = i === 0 ? (L.rows.length > 1 ? 'Ты лидер группы 🔥' : '') : `ещё ${fmt(L.rows[i - 1].xp - r.xp + 1)} XP до ${i} места`;
+    rows += `<div class="lrow st${r.me ? ' me' : ''}" style="--i:${Math.min(i + 4, 14)}"><span class="pl${i < 3 ? ' g' + (i + 1) : ''}">${i + 1}</span>
+      <span class="av" style="background:${avColor(r.name)}">${esc((r.me ? 'Я' : r.name).charAt(0).toUpperCase())}</span>
+      <div class="meta" style="flex:1;min-width:0"><b>${r.me ? 'Ты' : esc(r.name)}</b>${sub ? `<span>${sub}</span>` : ''}</div><span class="x">${fmt(r.xp)} XP</span></div>`;
+    if (L.promote && i === L.promote - 1 && L.rows.length > L.promote) rows += `<div class="zone up">${ic('arrowup', 14, 2.6)}ЗОНА ПОВЫШЕНИЯ</div>`;
+  });
+  const alone = L.rows.length <= 1 ? `<div class="card lgempty st" style="--i:5"><p>Пока в твоей группе только ты. Позови друзей — соревноваться веселее, а топ-5 переходят в лигу выше.</p>
+    <button class="btn" data-act="invite">${ic('share', 20, 2.4)}Позвать друзей</button></div>` : '';
+  const body = head + `<div class="shields st" style="--i:1">${shields}</div>
+    <div class="lgt st" style="--i:2">Лига «${names[tier - 1]}»</div>
+    <div class="lgs st" style="--i:2">${tier < names.length ? `Топ-${L.promote} переходят в лигу «${names[tier]}»` : 'Высшая лига — удержись в топе!'}</div>
+    <button class="lghow st" style="--i:3" data-act="lghow">${ic('info', 16, 2.4)}Как работает лига</button>${rows}${alone}`;
+  return [body, ''];
+}
+function leagueHow() {
+  overlay(`<div class="wn"><h3>Как работает лига</h3><div class="ver">Неделя — с понедельника по воскресенье (по Москве)</div><ul>
+    <li><span class="wi">${ic('star', 20, 2.2)}</span><div><b>Зарабатывай XP</b><span>+10 за привычку, +20 за закрытый день, ×1,5 при серии от 7 дней.</span></div></li>
+    <li><span class="wi">${ic('arrowup', 20, 2.4)}</span><div><b>Топ-${(S.league && S.league.promote) || 5} — вверх</b><span>Лучшие в группе переходят в лигу выше (нужен хотя бы 1 XP).</span></div></li>
+    <li><span class="wi">${ic('arrowdown', 20, 2.4)}</span><div><b>Последние 5 — вниз</b><span>Только в группах от 10 человек и не ниже первой лиги.</span></div></li>
+    <li><span class="wi">${ic('trophy', 20, 2.2)}</span><div><b>5 лиг</b><span>${(S.league ? S.league.leagues : ['Искра', 'Огонёк', 'Пламя', 'Костёр', 'Феникс']).join(' → ')}</span></div></li>
+    <li><span class="wi">${ic('bell', 20, 2.2)}</span><div><b>Итоги — в чат</b><span>В понедельник бот напишет, какое место ты занял.</span></div></li></ul></div>
+    <button class="btn" data-r="ok">Понятно</button>`, () => {});
+}
+async function loadLeague() {
+  if (!inTG || S.leagueLoading) return;
+  S.leagueLoading = true; S.leagueErr = false;
+  try {
+    clearTimeout(syncTimer); await syncNow();
+    const r = await fetch(API_BASE + '/api/league', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ initData: tg.initData }) });
+    const j = await r.json(); if (!j.ok) throw new Error('league');
+    S.league = j;
+  } catch (e) { S.leagueErr = !S.league; }
+  S.leagueLoading = false;
+  if (S.view === 'main' && S.tab === 'league') { S.lastView = null; render(); }
+}
+async function shareText(text) {
   let url = location.origin;
   try { const r = await fetch(API_BASE + '/api/me'); const j = await r.json(); if (j.username) url = `https://t.me/${j.username}`; } catch (e) {}
   const link = `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`;
   hap.tap();
   if (inTG && ver('6.1')) tg.openTelegramLink(link); else window.open(link, '_blank');
+}
+function applyTheme() {
+  const on = S.meta.theme === 'midnight' && S.sim.level >= 10;
+  document.body.classList.toggle('midnight', on);
+  const st = document.querySelectorAll('#gR stop'), c = on ? ['#2563eb', '#0ea5e9', '#22d3ee'] : ['#7a4dff', '#b14fd6', '#e5508a'];
+  st.forEach((x, i) => x.setAttribute('stop-color', c[i]));
 }
 
 /* ---------- экран напоминаний ---------- */
@@ -927,15 +1253,17 @@ function goBack() {
   render();
 }
 function tabbar() {
-  return `<nav class="tabs"><button class="tab${S.tab === 'today' ? ' on' : ''}" data-act="tab" data-v="today">${ic('cal', 22)}Сегодня</button>
-    <button class="fab" data-act="new" aria-label="Добавить привычку">${ic('plus', 28, 2.6)}</button>
-    <button class="tab${S.tab === 'stats' ? ' on' : ''}" data-act="tab" data-v="stats">${ic('chart', 22)}Статистика</button></nav>`;
+  const tb = (v, i, t) => `<button class="tab${S.tab === v ? ' on' : ''}" data-act="tab" data-v="${v}">${ic(i, 22)}${t}</button>`;
+  return `<nav class="tabs">${tb('today', 'cal', 'Сегодня')}${tb('stats', 'chart', 'Статистика')}
+    <button class="fab" data-act="new" aria-label="Добавить привычку">${ic('plus', 28, 2.6)}</button>${tb('league', 'trophy', 'Лига')}${tb('streak', 'flame', 'Серия')}</nav>`;
 }
 function render() {
   S.sim = streakSim();
   const viewId = S.view === 'main' ? 'main-' + S.tab : S.view, entering = viewId !== S.lastView;
-  const [body, bottom] = S.view === 'detail' ? viewDetail() : S.view === 'form' ? viewForm() : S.view === 'streak' ? viewStreak()
-    : S.view === 'reminders' ? viewReminders() : S.tab === 'today' ? viewToday() : viewStats();
+  applyTheme();
+  const [body, bottom] = S.view === 'detail' ? viewDetail() : S.view === 'form' ? viewForm() : S.view === 'level' ? viewLevel()
+    : S.view === 'reminders' ? viewReminders() : S.tab === 'today' ? viewToday() : S.tab === 'stats' ? viewStats()
+    : S.tab === 'league' ? viewLeague() : viewStreak();
   const animCls = entering ? (S.view === 'main' ? ' enter fade' : ' enter push') : '';
   document.getElementById('app').innerHTML = `<div class="view${animCls}">${body}</div>${S.view === 'main' ? tabbar() : bottom}`;
   if (entering) window.scrollTo(0, 0);
@@ -965,20 +1293,24 @@ function animate(entering) {
     const k = 'c_' + el.dataset.k, to = +el.dataset.c, suf = el.dataset.suf || '';
     const from = REDUCE ? to : entering ? 0 : (k in A ? A[k] : to);
     A[k] = to;
-    if (from === to) { el.textContent = to + suf; return; }
+    if (from === to) { el.textContent = fmt(to) + suf; return; }
     const t0 = performance.now(), dur = 800;
-    const step = now => { const q = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - q, 3); el.textContent = Math.round(from + (to - from) * e) + suf; if (q < 1) requestAnimationFrame(step); };
-    el.textContent = from + suf; requestAnimationFrame(step);
+    const step = now => { const q = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - q, 3); el.textContent = fmt(from + (to - from) * e) + suf; if (q < 1) requestAnimationFrame(step); };
+    el.textContent = fmt(from) + suf; requestAnimationFrame(step);
   });
 }
 
 /* ---------- действия ---------- */
 const H = id => S.habits.find(h => h.id === id);
 function mark(id, fn, k = S.sel) {
-  const before = streakSim(); fn(k); const after = streakSim(), t = todayKey();
+  const t = todayKey();
+  if (k !== t) { toast('Отмечать можно только сегодня 🔒'); return; }
+  const before = streakSim(); fn(k); const after = streakSim();
   S.pulse = id;
-  if (!before.todayDone && after.todayDone) { render(); setTimeout(() => celebrate(after.streak, after.earned[t]), 380); }
-  else { hap.tap(); render(); }
+  const lvUp = after.level > (S.meta.lvl || 0) ? after.level : 0;
+  if (lvUp) { S.meta.lvl = lvUp; saveMeta(); }
+  if (!before.todayDone && after.todayDone) { render(); setTimeout(() => celebrate(after.streak, after.earned[t]), 380); if (lvUp) setTimeout(() => levelUp(lvUp), 3300); }
+  else { hap.tap(); render(); if (lvUp) setTimeout(() => levelUp(lvUp), 450); }
 }
 function segMove(el, after) {
   const seg = el.parentElement, idx = [...seg.children].indexOf(el);
@@ -987,7 +1319,7 @@ function segMove(el, after) {
 }
 function swFlip(el, after) { el.classList.toggle('on'); hap.tap(); setTimeout(() => { after(); render(); }, 260); }
 const actions = {
-  tab: el => { if (S.tab === el.dataset.v) return; S.tab = el.dataset.v; hap.sel(); render(); },
+  tab: el => { if (S.tab === el.dataset.v) return; S.tab = el.dataset.v; hap.sel(); render(); if (S.tab === 'league') loadLeague(); },
   pick: el => { S.sel = el.dataset.d; hap.sel(); render(); },
   toggle: (el, id) => mark(id, k => { const h = H(id); setVal(h, k, val(h, k) ? 0 : 1); }),
   inc: (el, id) => mark(id, k => { const h = H(id); setVal(h, k, Math.min(999, val(h, k) + 1)); }),
@@ -1000,10 +1332,16 @@ const actions = {
   redit: (el, id) => openForm(H(id)),
   more: (el, id) => moreSheet(id),
   back: () => goBack(),
-  streak: () => { hap.sel(); go('streak'); },
+  streak: () => { hap.sel(); S.tab = 'streak'; go('main'); },
+  level: () => { hap.sel(); go('level'); },
+  lvpreview: () => levelUp(S.sim.level + 1, true),
+  whatsnew: () => whatsNew(),
+  lghow: () => leagueHow(),
+  lgretry: () => { S.leagueErr = false; render(); loadLeague(); },
+  invite: () => shareText('🔥 Давай соревноваться в лиге трекера привычек! Кто больше XP за неделю?'),
+  theme: el => swFlip(el, () => { S.meta.theme = S.meta.theme === 'midnight' ? '' : 'midnight'; saveMeta(); }),
   reminders: () => { S.cfgDraft = JSON.parse(JSON.stringify(S.cfg)); hap.sel(); go('reminders'); },
   dtoday: (el, id) => { const h = H(id), t = todayKey(); mark(id, () => setVal(h, t, h.type === 'count' ? Math.min(999, val(h, t) + 1) : val(h, t) ? 0 : 1), t); },
-  calday: (el, id) => { const h = H(id), d = el.dataset.d; mark(id, () => setVal(h, d, h.type === 'count' ? (val(h, d) >= h.target ? 0 : h.target) : val(h, d) ? 0 : 1), d); },
   calm: el => { S.calOff = Math.min(0, S.calOff + (+el.dataset.d)); hap.sel(); render(); },
   dremind: (el, id) => swFlip(el, () => { const h = H(id); h.remind = h.remind ? null : '21:00'; if (!h.remind) h.every = 0; markHabit(h.id); }),
   statp: el => segMove(el, () => { S.statP = el.dataset.v; }),
@@ -1101,14 +1439,18 @@ function undoDelete() {
   if (!pendingDel) return;
   const p = pendingDel; pendingDel = null; clearTimeout(p.timer); p.toast && p.toast.remove();
   if (!H(p.h.id)) { S.habits.splice(Math.min(p.idx, S.habits.length), 0, p.h); if (p.log) S.log[p.h.id] = p.log; }
-  S.pulse = p.h.id; hap.tap(); S.lastView = null; render(); scheduleSync();
+  S.pulse = p.h.id; hap.tap(); render(); scheduleSync();
 }
 actions.undo = () => undoDelete();
 
 /* ---------- старт ---------- */
 (async function init() {
   await load();
+  const sim0 = streakSim();
+  if (!S.meta.lvl) { S.meta.lvl = sim0.level; saveMeta(); }     // первый запуск после обновления — без салюта
   render();
+  if (sim0.level > S.meta.lvl) { S.meta.lvl = sim0.level; saveMeta(); setTimeout(() => levelUp(sim0.level), 600); }
+  setTimeout(loadLeague, 2500);
   scheduleSync();
   if (inTG && ver('6.1')) tg.BackButton.onClick(goBack);
   document.addEventListener('visibilitychange', () => {

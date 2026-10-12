@@ -6,6 +6,7 @@
   * принимает от приложения привычки и настройки напоминаний: POST /api/sync (подпись initData проверяется)
   * хранит данные в Postgres (Neon), если задан DATABASE_URL, иначе в локальной SQLite
   * считает пользователей; владелец видит статистику командой /stats
+  * ведёт еженедельную лигу по XP (5 лиг, группы до 30 человек, топ-5 поднимаются выше)
   * присылает напоминания:
       - по привычкам (в заданное время или каждые N часов), если привычка ещё не отмечена
       - «План на день» — утром список сегодняшних привычек
@@ -54,6 +55,20 @@ BASE_DIR = Path(__file__).resolve().parent
 TIME_RE = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 REMIND_WINDOW_MIN = 5  # если бот «проспал» минуту, напоминание всё равно уйдёт в течение 5 минут
+LEAGUES = ["Искра", "Огонёк", "Пламя", "Костёр", "Феникс"]
+PROMOTE, DEMOTE, GROUP_MAX, DEMOTE_MIN_GROUP = 5, 5, 30, 10
+LEAGUE_TZ = timedelta(hours=3)  # неделя лиги идёт по московскому времени: с понедельника 00:00
+
+
+def league_week(now: datetime | None = None) -> tuple[str, int]:
+    """Текущая неделя лиги: (дата понедельника 'ГГГГ-ММ-ДД' по МСК, unix-время окончания недели)."""
+    now = now or datetime.now(timezone.utc)
+    msk = now + LEAGUE_TZ
+    monday = (msk - timedelta(days=msk.weekday())).date()
+    end = datetime(monday.year, monday.month, monday.day, tzinfo=timezone.utc) + timedelta(days=7) - LEAGUE_TZ
+    return monday.isoformat(), int(end.timestamp())
+
+
 DEFAULT_CFG = {
     "plan": {"on": True, "time": "09:00"},
     "save": {"on": True, "time": "23:00"},
@@ -80,6 +95,17 @@ SCHEMA = [
     """CREATE TABLE IF NOT EXISTS meta(
         k TEXT PRIMARY KEY,
         v TEXT NOT NULL)""",
+    """CREATE TABLE IF NOT EXISTS players(
+        user_id BIGINT  PRIMARY KEY,
+        tier    INTEGER NOT NULL DEFAULT 1,
+        name    TEXT    NOT NULL DEFAULT '')""",
+    """CREATE TABLE IF NOT EXISTS league(
+        week    TEXT    NOT NULL,
+        user_id BIGINT  NOT NULL,
+        tier    INTEGER NOT NULL,
+        grp     INTEGER NOT NULL,
+        xp      INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY(week, user_id))""",
 ]
 
 
@@ -103,6 +129,11 @@ class Store:
         self.lite: sqlite3.Connection | None = None
         self.profiles: dict[int, tuple[int, str]] = {}
         self.sent: set[tuple[int, str, str]] = set()
+        self.players: dict[int, dict] = {}   # user_id -> {tier, name}
+        self.week = ""                       # неделя лиги, которая сейчас в памяти
+        self.league: dict[int, dict] = {}    # user_id -> {tier, grp, xp} за self.week
+        self.league_done: str | None = None  # последняя неделя, по которой подведены итоги
+        self.league_checked = ""             # неделя, на которой последний раз проверяли итоги
 
     @property
     def kind(self) -> str:
@@ -128,6 +159,11 @@ class Store:
                          for r in await self.fetch("SELECT user_id, tz_offset, data FROM profiles")}
         self.sent = {(r["user_id"], r["item"], r["day"])
                      for r in await self.fetch("SELECT user_id, item, day FROM sent")}
+        self.players = {r["user_id"]: {"tier": r["tier"], "name": r["name"]}
+                        for r in await self.fetch("SELECT user_id, tier, name FROM players")}
+        self.week = league_week()[0]
+        self.league = {r["user_id"]: {"tier": r["tier"], "grp": r["grp"], "xp": r["xp"]}
+                       for r in await self.fetch("SELECT user_id, tier, grp, xp FROM league WHERE week = $1", self.week)}
         log.info("storage: %s, profiles: %s", self.kind, len(self.profiles))
 
     async def close(self) -> None:
@@ -188,6 +224,45 @@ class Store:
         if db:
             await self.execute("DELETE FROM sent WHERE day < $1", cutoff)
 
+    # --- лига ---
+    async def set_player(self, user_id: int, name: str) -> dict:
+        p = self.players.get(user_id)
+        if p is None:
+            p = self.players[user_id] = {"tier": 1, "name": name}
+            await self.execute("INSERT INTO players(user_id, tier, name) VALUES($1, 1, $2) ON CONFLICT(user_id) DO NOTHING",
+                               user_id, name)
+        elif name and p["name"] != name:
+            p["name"] = name
+            await self.execute("UPDATE players SET name = $1 WHERE user_id = $2", name, user_id)
+        return p
+
+    async def league_update(self, user_id: int, name: str, xp: int) -> dict:
+        """Вступает в лигу текущей недели (если ещё нет) и обновляет недельный XP."""
+        week = league_week()[0]
+        if week != self.week:  # неделя сменилась, итоги подведёт league_tick
+            self.week, self.league = week, {}
+        p = await self.set_player(user_id, name)
+        row = self.league.get(user_id)
+        if row is None:
+            counts: dict[int, int] = {}
+            for r in self.league.values():
+                if r["tier"] == p["tier"]:
+                    counts[r["grp"]] = counts.get(r["grp"], 0) + 1
+            grp = next((g for g in sorted(counts) if counts[g] < GROUP_MAX), max(counts, default=-1) + 1)
+            row = self.league[user_id] = {"tier": p["tier"], "grp": grp, "xp": xp}
+            await self.execute("INSERT INTO league(week, user_id, tier, grp, xp) VALUES($1, $2, $3, $4, $5) "
+                               "ON CONFLICT(week, user_id) DO UPDATE SET xp = excluded.xp",
+                               week, user_id, p["tier"], grp, xp)
+        elif row["xp"] != xp:
+            row["xp"] = xp
+            await self.execute("UPDATE league SET xp = $1 WHERE week = $2 AND user_id = $3", xp, week, user_id)
+        return row
+
+    def standings(self, tier: int, grp: int, rows: dict | None = None) -> list[tuple[int, dict]]:
+        rows = self.league if rows is None else rows
+        group = [(uid, r) for uid, r in rows.items() if r["tier"] == tier and r["grp"] == grp]
+        return sorted(group, key=lambda x: (-x[1]["xp"], x[0]))
+
     # --- пользователи и статистика ---
     async def touch_user(self, user_id: int, opened: bool = False) -> None:
         now = int(time.time())
@@ -239,7 +314,7 @@ async def collect_stats() -> dict:
             habits_total += len(hs)
         if any(h.get("times") for h in hs):
             with_reminders += 1
-    st.update(with_habits=with_habits, with_reminders=with_reminders,
+    st.update(league=len(DB.league), with_habits=with_habits, with_reminders=with_reminders,
               avg_habits=round(habits_total / with_habits, 1) if with_habits else 0)
     return st
 
@@ -253,7 +328,8 @@ def stats_text(st: dict) -> str:
         f"🔥 Активные: за 24 ч — {st['act1']}, за 7 дней — {st['act7']}, за 30 дней — {st['act30']}\n"
         f"📱 Открывали трекер: всего — {st['opened']}, за 7 дней — {st['opened7']}\n"
         f"📋 С привычками: {st['with_habits']} (в среднем {st['avg_habits']} на человека)\n"
-        f"🔔 С напоминаниями по привычкам: {st['with_reminders']}\n\n"
+        f"🔔 С напоминаниями по привычкам: {st['with_reminders']}\n"
+        f"🏆 В лиге на этой неделе: {st['league']}\n\n"
         f"🗄 База: {storage}"
     )
 
@@ -351,6 +427,67 @@ def week_text(week: dict | None, streak) -> str:
     return "\n".join(parts)
 
 
+# ---------- итоги недели лиги ----------
+def week_results(rows: dict) -> list[dict]:
+    """Кто куда переходит по итогам недели. rows: user_id -> {tier, grp, xp}."""
+    out = []
+    for tier, grp in {(r["tier"], r["grp"]) for r in rows.values()}:
+        group = DB.standings(tier, grp, rows)
+        n = len(group)
+        for place, (uid, r) in enumerate(group, 1):
+            new = tier
+            if place <= PROMOTE and r["xp"] > 0 and tier < len(LEAGUES):
+                new = tier + 1
+            elif tier > 1 and n >= DEMOTE_MIN_GROUP and place > n - DEMOTE:
+                new = tier - 1
+            out.append({"user_id": uid, "tier": tier, "new": new, "place": place, "xp": r["xp"], "size": n})
+    return out
+
+
+def result_text(r: dict) -> str:
+    old, new = LEAGUES[r["tier"] - 1], LEAGUES[r["new"] - 1]
+    head = f"🏆 Неделя в лиге «{old}» закончилась: ты на {r['place']} месте ({r['xp']} XP)."
+    if r["new"] > r["tier"]:
+        return f"{head}\nПоздравляю — ты поднимаешься в лигу «{new}»! 🔥"
+    if r["new"] < r["tier"]:
+        return f"{head}\nВ этот раз — лига «{new}». На новой неделе всё вернём 💪"
+    return f"{head}\nОстаёшься в лиге «{old}». Новая неделя уже началась!"
+
+
+async def close_week(bot, week: str, rows: dict, notify: bool) -> None:
+    results = week_results(rows)
+    for r in results:
+        p = DB.players.setdefault(r["user_id"], {"tier": 1, "name": ""})
+        if r["new"] != p["tier"]:
+            p["tier"] = r["new"]
+            await DB.execute("UPDATE players SET tier = $1 WHERE user_id = $2", r["new"], r["user_id"])
+    await DB.execute("INSERT INTO meta(k, v) VALUES('league_done', $1) ON CONFLICT(k) DO UPDATE SET v = excluded.v", week)
+    log.info("league week %s closed: %s players", week, len(results))
+    if notify and bot is not None:
+        for r in results:
+            if r["xp"] > 0:
+                await send(bot, r["user_id"], result_text(r))
+
+
+async def league_tick(bot) -> None:
+    """Подводит итоги всех завершённых недель, которые ещё не закрыты."""
+    current = league_week()[0]
+    done = DB.league_done
+    if done is None:
+        done = await DB.fetchval("SELECT v FROM meta WHERE k = 'league_done'") or ""
+    weeks = [r["week"] for r in await DB.fetch(
+        "SELECT DISTINCT week FROM league WHERE week < $1 AND week > $2 ORDER BY week", current, done or "")]
+    for i, week in enumerate(weeks):
+        rows = {r["user_id"]: {"tier": r["tier"], "grp": r["grp"], "xp": r["xp"]}
+                for r in await DB.fetch("SELECT user_id, tier, grp, xp FROM league WHERE week = $1", week)}
+        await close_week(bot, week, rows, notify=(i == len(weeks) - 1))
+        done = week
+    DB.league_done = done
+    DB.league_checked = current
+    if DB.week != current:
+        DB.week, DB.league = current, {}
+
+
 # ---------- клавиатура ----------
 def open_kb(text: str = "Открыть трекер") -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=text, web_app=WebAppInfo(url=WEBAPP_URL))]])
@@ -390,7 +527,8 @@ async def cmd_help(m: Message) -> None:
         "1. Открой трекер кнопкой ниже или через меню слева от поля ввода.\n"
         "2. Добавь привычки: да/нет, количество (например, 8 стаканов) или отказ (дни без срыва).\n"
         "3. Закрывай все привычки за день — огонёк 🔥 горит, серия растёт. Заморозки ❄️ спасают пропуски.\n"
-        "4. Напоминания настраиваются в приложении — значок колокольчика.\n\n"
+        "4. Напоминания настраиваются в приложении — значок колокольчика.\n"
+        "5. За отметки копятся XP и растут уровни, а в лиге можно соревноваться с другими за неделю 🏆\n\n"
         "Данные хранятся в облаке Telegram и доступны с любого устройства.",
         reply_markup=open_kb(),
     )
@@ -486,7 +624,65 @@ async def api_sync(request: web.Request) -> web.Response:
     }
     await DB.save_profile(init.user.id, tz, json.dumps(data, ensure_ascii=False))
     await DB.touch_user(init.user.id, opened=True)
+    xp = week_xp(body.get("xp"))
+    if xp is not None:
+        await DB.league_update(init.user.id, display_name(init.user), xp)
     return web.json_response({"ok": True, "habits": len(data["habits"])})
+
+
+def display_name(user) -> str:
+    """Имя для таблицы лиги: имя и первая буква фамилии."""
+    name = (user.first_name or "").strip() or "Игрок"
+    if user.last_name:
+        name += f" {user.last_name.strip()[:1]}."
+    return name[:24]
+
+
+def week_xp(raw) -> int | None:
+    """XP за текущую неделю лиги из присланных приложением XP по дням."""
+    if not isinstance(raw, dict) or not isinstance(raw.get("days"), dict):
+        return None
+    monday = league_week()[0]
+    total = 0
+    for day, v in list(raw["days"].items())[:10]:
+        if isinstance(day, str) and DATE_RE.match(day) and day >= monday and isinstance(v, int):
+            total += max(0, min(2000, v))
+    return total
+
+
+async def auth(request: web.Request):
+    try:
+        body = await request.json()
+        init = safe_parse_webapp_init_data(BOT_TOKEN, str(body.get("initData", "")))
+    except Exception:
+        return None
+    return init if init.user else None
+
+
+async def api_league(request: web.Request) -> web.Response:
+    init = await auth(request)
+    if init is None:
+        return web.json_response({"ok": False, "error": "bad initData"}, status=401)
+    uid = init.user.id
+    week, end = league_week()
+    me = DB.league.get(uid) if DB.week == week else None
+    if me is None:
+        me = await DB.league_update(uid, display_name(init.user), 0)
+    group = DB.standings(me["tier"], me["grp"])
+    n = len(group)
+    rows, place = [], 0
+    for i, (u, r) in enumerate(group, 1):
+        if u == uid:
+            place = i
+        name = DB.players.get(u, {}).get("name") or "Игрок"
+        rows.append({"name": name, "xp": r["xp"], "me": u == uid})
+    tier = me["tier"]
+    return web.json_response({
+        "ok": True, "week": week, "end": end, "tier": tier, "leagues": LEAGUES, "place": place, "size": n,
+        "promote": PROMOTE if tier < len(LEAGUES) else 0,
+        "demoteFrom": (n - DEMOTE) if tier > 1 and n >= DEMOTE_MIN_GROUP else None,
+        "rows": rows,
+    })
 
 
 # ---------- напоминания ----------
@@ -557,6 +753,8 @@ async def reminder_loop(bot: Bot) -> None:
     ticks = 0
     while True:
         try:
+            if DB.league_checked != league_week()[0]:  # раз в неделю (и при старте)
+                await league_tick(bot)
             await check_reminders(bot)
             ticks += 1
             if ticks % 120 == 0:  # раз в час чистим память, раз в сутки — базу
@@ -574,7 +772,9 @@ def build_app() -> web.Application:
     app.router.add_get("/health", health)
     app.router.add_get("/api/me", api_me)
     app.router.add_post("/api/sync", api_sync)
+    app.router.add_post("/api/league", api_league)
     app.router.add_route("OPTIONS", "/api/sync", options)
+    app.router.add_route("OPTIONS", "/api/league", options)
     return app
 
 
