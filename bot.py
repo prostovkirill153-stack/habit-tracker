@@ -4,6 +4,8 @@
 Что делает:
   * раздаёт index.html (саму Mini App) по адресу /
   * принимает от приложения привычки и настройки напоминаний: POST /api/sync (подпись initData проверяется)
+  * хранит данные в Postgres (Neon), если задан DATABASE_URL, иначе в локальной SQLite
+  * считает пользователей; владелец видит статистику командой /stats
   * присылает напоминания:
       - по привычкам (в заданное время или каждые N часов), если привычка ещё не отмечена
       - «План на день» — утром список сегодняшних привычек
@@ -11,7 +13,7 @@
       - «Итоги недели» — в воскресенье
 
 Запуск:
-  BOT_TOKEN=123:ABC WEBAPP_URL=https://твой-домен/ python bot.py
+  BOT_TOKEN=123:ABC WEBAPP_URL=https://твой-домен/ [DATABASE_URL=postgresql://...] python bot.py
 """
 import asyncio
 import json
@@ -19,11 +21,13 @@ import logging
 import os
 import re
 import sqlite3
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from aiohttp import web
-from aiogram import Bot, Dispatcher, Router
+from aiogram import BaseMiddleware, Bot, Dispatcher, Router
 from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import Command, CommandStart
 from aiogram.types import (
@@ -43,6 +47,8 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
 WEBAPP_URL = os.environ.get("WEBAPP_URL", "")
 PORT = int(os.environ.get("PORT", "8080"))
 DB_PATH = os.environ.get("DB_PATH", "habits.db")
+DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
+ADMIN_ID = int(os.environ.get("ADMIN_ID", "0") or 0)
 BASE_DIR = Path(__file__).resolve().parent
 
 TIME_RE = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
@@ -54,31 +60,202 @@ DEFAULT_CFG = {
     "week": {"on": False, "time": "20:00"},
 }
 
-DB: sqlite3.Connection | None = None
 BOT_USERNAME = ""
 
+SCHEMA = [
+    """CREATE TABLE IF NOT EXISTS profiles(
+        user_id   BIGINT  PRIMARY KEY,
+        tz_offset INTEGER NOT NULL DEFAULT 180,
+        data      TEXT    NOT NULL DEFAULT '{}')""",
+    """CREATE TABLE IF NOT EXISTS sent(
+        user_id BIGINT NOT NULL,
+        item    TEXT   NOT NULL,
+        day     TEXT   NOT NULL,
+        PRIMARY KEY(user_id, item, day))""",
+    """CREATE TABLE IF NOT EXISTS users(
+        user_id    BIGINT PRIMARY KEY,
+        first_seen BIGINT NOT NULL,
+        last_seen  BIGINT NOT NULL,
+        last_open  BIGINT)""",
+    """CREATE TABLE IF NOT EXISTS meta(
+        k TEXT PRIMARY KEY,
+        v TEXT NOT NULL)""",
+]
 
-# ---------- база ----------
-def init_db() -> None:
-    global DB
-    DB = sqlite3.connect(DB_PATH)
-    DB.row_factory = sqlite3.Row
-    DB.executescript(
-        """
-        CREATE TABLE IF NOT EXISTS profiles(
-            user_id   INTEGER PRIMARY KEY,
-            tz_offset INTEGER NOT NULL DEFAULT 180,
-            data      TEXT    NOT NULL DEFAULT '{}'
-        );
-        CREATE TABLE IF NOT EXISTS sent(
-            user_id INTEGER NOT NULL,
-            item    TEXT    NOT NULL,
-            day     TEXT    NOT NULL,
-            PRIMARY KEY(user_id, item, day)
-        );
-        """
+
+def clean_dsn(url: str) -> str:
+    """Neon добавляет в адрес параметры, которые asyncpg не понимает (например channel_binding)."""
+    parts = urlsplit(url)
+    keep = [(k, v) for k, v in parse_qsl(parts.query) if k in ("sslmode", "sslrootcert", "options")]
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(keep), ""))
+
+
+class Store:
+    """Одинаковый интерфейс для Postgres (asyncpg) и SQLite. В SQL пишем параметры как $1, $2…
+
+    Профили и отметки об отправке держим ещё и в памяти: цикл напоминаний читает только память,
+    а в базу ходим лишь при событиях (открыли приложение, написали боту, ушло напоминание).
+    Так бесплатный Neon успевает «засыпать» и не тратит лимит вычислений."""
+
+    def __init__(self, url: str, path: str):
+        self.url, self.path = url, path
+        self.pool = None
+        self.lite: sqlite3.Connection | None = None
+        self.profiles: dict[int, tuple[int, str]] = {}
+        self.sent: set[tuple[int, str, str]] = set()
+
+    @property
+    def kind(self) -> str:
+        return "postgres" if self.pool else "sqlite"
+
+    async def open(self) -> None:
+        if self.url:
+            import asyncpg  # noqa: WPS433 — нужен только с Postgres
+            self.pool = await asyncpg.create_pool(
+                clean_dsn(self.url), min_size=1, max_size=4, statement_cache_size=0, command_timeout=20)
+        else:
+            self.lite = sqlite3.connect(self.path)
+            self.lite.row_factory = sqlite3.Row
+        for stmt in SCHEMA:
+            await self.execute(stmt)
+        # пользователи, которые уже настраивали напоминания, тоже считаются
+        now = int(time.time())
+        await self.execute(
+            "INSERT INTO users(user_id, first_seen, last_seen, last_open) "
+            "SELECT user_id, $1, $1, $1 FROM profiles WHERE user_id > 0 ON CONFLICT(user_id) DO NOTHING", now)
+        await self.prune_sent(db=True)
+        self.profiles = {r["user_id"]: (r["tz_offset"], r["data"])
+                         for r in await self.fetch("SELECT user_id, tz_offset, data FROM profiles")}
+        self.sent = {(r["user_id"], r["item"], r["day"])
+                     for r in await self.fetch("SELECT user_id, item, day FROM sent")}
+        log.info("storage: %s, profiles: %s", self.kind, len(self.profiles))
+
+    async def close(self) -> None:
+        if self.pool:
+            await self.pool.close()
+        if self.lite:
+            self.lite.close()
+
+    @staticmethod
+    def _lite_sql(sql: str) -> str:
+        return re.sub(r"\$(\d+)", r"?\1", sql)
+
+    async def execute(self, sql: str, *args) -> int:
+        """Выполняет запрос и возвращает число затронутых строк."""
+        if self.pool:
+            status = await self.pool.execute(sql, *args)
+            try:
+                return int(status.split()[-1])
+            except (ValueError, IndexError):
+                return 0
+        cur = self.lite.execute(self._lite_sql(sql), args)
+        self.lite.commit()
+        return cur.rowcount
+
+    async def fetch(self, sql: str, *args) -> list[dict]:
+        if self.pool:
+            return [dict(r) for r in await self.pool.fetch(sql, *args)]
+        return [dict(r) for r in self.lite.execute(self._lite_sql(sql), args).fetchall()]
+
+    async def fetchval(self, sql: str, *args):
+        rows = await self.fetch(sql, *args)
+        return next(iter(rows[0].values())) if rows else None
+
+    # --- профили и напоминания ---
+    async def save_profile(self, user_id: int, tz: int, data: str) -> None:
+        await self.execute(
+            """INSERT INTO profiles(user_id, tz_offset, data) VALUES($1, $2, $3)
+               ON CONFLICT(user_id) DO UPDATE SET tz_offset = excluded.tz_offset, data = excluded.data""",
+            user_id, tz, data)
+        self.profiles[user_id] = (tz, data)
+
+    async def mark_sent(self, user_id: int, item: str, day: str) -> bool:
+        """True, если это напоминание сегодня ещё не отправляли (и помечает его отправленным)."""
+        k = (user_id, item, day)
+        if k in self.sent:
+            return False
+        self.sent.add(k)
+        try:
+            return bool(await self.execute(
+                "INSERT INTO sent(user_id, item, day) VALUES($1, $2, $3) ON CONFLICT DO NOTHING", user_id, item, day))
+        except Exception:
+            log.exception("mark_sent failed")  # база недоступна — всё равно отправим, в памяти уже отмечено
+            return True
+
+    async def prune_sent(self, db: bool = False) -> None:
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=3)).strftime("%Y-%m-%d")
+        self.sent = {k for k in self.sent if k[2] >= cutoff}
+        if db:
+            await self.execute("DELETE FROM sent WHERE day < $1", cutoff)
+
+    # --- пользователи и статистика ---
+    async def touch_user(self, user_id: int, opened: bool = False) -> None:
+        now = int(time.time())
+        await self.execute(
+            """INSERT INTO users(user_id, first_seen, last_seen, last_open) VALUES($1, $2, $2, $3)
+               ON CONFLICT(user_id) DO UPDATE SET last_seen = excluded.last_seen,
+               last_open = COALESCE(excluded.last_open, users.last_open)""",
+            user_id, now, now if opened else None)
+
+    async def admin_id(self) -> int | None:
+        if ADMIN_ID:
+            return ADMIN_ID
+        v = await self.fetchval("SELECT v FROM meta WHERE k = 'admin_id'")
+        return int(v) if v else None
+
+    async def claim_admin(self, user_id: int) -> int | None:
+        """Первый, кто отправит /stats, становится владельцем (если ADMIN_ID не задан)."""
+        if not ADMIN_ID:
+            await self.execute("INSERT INTO meta(k, v) VALUES('admin_id', $1) ON CONFLICT(k) DO NOTHING", str(user_id))
+        return await self.admin_id()
+
+
+DB = Store(DATABASE_URL, DB_PATH)
+
+
+async def collect_stats() -> dict:
+    now = int(time.time())
+    d1, d7, d30 = now - 86400, now - 7 * 86400, now - 30 * 86400
+    row = (await DB.fetch(
+        """SELECT COUNT(*) AS total,
+             SUM(CASE WHEN first_seen >= $1 THEN 1 ELSE 0 END) AS new1,
+             SUM(CASE WHEN first_seen >= $2 THEN 1 ELSE 0 END) AS new7,
+             SUM(CASE WHEN last_seen  >= $1 THEN 1 ELSE 0 END) AS act1,
+             SUM(CASE WHEN last_seen  >= $2 THEN 1 ELSE 0 END) AS act7,
+             SUM(CASE WHEN last_seen  >= $3 THEN 1 ELSE 0 END) AS act30,
+             SUM(CASE WHEN last_open IS NOT NULL THEN 1 ELSE 0 END) AS opened,
+             SUM(CASE WHEN last_open >= $2 THEN 1 ELSE 0 END) AS opened7
+           FROM users""", d1, d7, d30))[0]
+    st = {k: int(v or 0) for k, v in row.items()}
+    habits_total = with_habits = with_reminders = 0
+    for _tz, raw in DB.profiles.values():
+        try:
+            data = json.loads(raw)
+        except ValueError:
+            continue
+        hs = data.get("habits") or []
+        if hs:
+            with_habits += 1
+            habits_total += len(hs)
+        if any(h.get("times") for h in hs):
+            with_reminders += 1
+    st.update(with_habits=with_habits, with_reminders=with_reminders,
+              avg_habits=round(habits_total / with_habits, 1) if with_habits else 0)
+    return st
+
+
+def stats_text(st: dict) -> str:
+    storage = "Neon (Postgres) — данные сохраняются" if DB.kind == "postgres" else "SQLite — ⚠️ сбрасывается при обновлении бота"
+    return (
+        "📊 Статистика бота\n\n"
+        f"👥 Всего пользователей: {st['total']}\n"
+        f"🆕 Новые: за 24 ч — {st['new1']}, за 7 дней — {st['new7']}\n"
+        f"🔥 Активные: за 24 ч — {st['act1']}, за 7 дней — {st['act7']}, за 30 дней — {st['act30']}\n"
+        f"📱 Открывали трекер: всего — {st['opened']}, за 7 дней — {st['opened7']}\n"
+        f"📋 С привычками: {st['with_habits']} (в среднем {st['avg_habits']} на человека)\n"
+        f"🔔 С напоминаниями по привычкам: {st['with_reminders']}\n\n"
+        f"🗄 База: {storage}"
     )
-    DB.commit()
 
 
 # ---------- очистка данных от клиента ----------
@@ -183,6 +360,19 @@ def open_kb(text: str = "Открыть трекер") -> InlineKeyboardMarkup:
 router = Router()
 
 
+class TrackUsers(BaseMiddleware):
+    """Запоминает каждого, кто пишет боту, — для /stats."""
+
+    async def __call__(self, handler, event, data):
+        user = getattr(event, "from_user", None)
+        if user and not user.is_bot:
+            try:
+                await DB.touch_user(user.id)
+            except Exception:
+                log.exception("touch_user failed")
+        return await handler(event, data)
+
+
 @router.message(CommandStart())
 async def cmd_start(m: Message) -> None:
     await m.answer(
@@ -204,6 +394,22 @@ async def cmd_help(m: Message) -> None:
         "Данные хранятся в облаке Telegram и доступны с любого устройства.",
         reply_markup=open_kb(),
     )
+
+
+@router.message(Command("stats"))
+async def cmd_stats(m: Message) -> None:
+    admin = await DB.admin_id()
+    first_time = False
+    if admin is None:
+        admin = await DB.claim_admin(m.from_user.id)
+        first_time = admin == m.from_user.id
+    if admin != m.from_user.id:  # для остальных команды как будто нет
+        await any_message(m)
+        return
+    text = stats_text(await collect_stats())
+    if first_time:
+        text = "👑 Ты назначен владельцем бота — эта команда работает только у тебя.\n\n" + text
+    await m.answer(text)
 
 
 @router.message()
@@ -278,12 +484,8 @@ async def api_sync(request: web.Request) -> web.Response:
         "cfg": clean_cfg(body.get("cfg")),
         "week": week,
     }
-    DB.execute(
-        """INSERT INTO profiles(user_id, tz_offset, data) VALUES(?,?,?)
-           ON CONFLICT(user_id) DO UPDATE SET tz_offset=excluded.tz_offset, data=excluded.data""",
-        (init.user.id, tz, json.dumps(data, ensure_ascii=False)),
-    )
-    DB.commit()
+    await DB.save_profile(init.user.id, tz, json.dumps(data, ensure_ascii=False))
+    await DB.touch_user(init.user.id, opened=True)
     return web.json_response({"ok": True, "habits": len(data["habits"])})
 
 
@@ -334,24 +536,21 @@ async def send(bot: Bot, user_id: int, text: str) -> None:
 
 async def check_reminders(bot: Bot, now: datetime | None = None) -> None:
     now = now or datetime.now(timezone.utc)
-    rows = DB.execute("SELECT user_id, tz_offset, data FROM profiles").fetchall()
-    for row in rows:
-        local = now + timedelta(minutes=row["tz_offset"])
+    for user_id, (tz_offset, raw) in list(DB.profiles.items()):
+        local = now + timedelta(minutes=tz_offset)
         day = local.strftime("%Y-%m-%d")
         now_min = local.hour * 60 + local.minute
         start_min = max(0, now_min - REMIND_WINDOW_MIN)
         try:
-            data = json.loads(row["data"])
+            data = json.loads(raw)
         except ValueError:
             continue
         for item, t, text in due_items(data, local):
             h, m = map(int, t.split(":"))
             if not (start_min <= h * 60 + m <= now_min):
                 continue
-            cur = DB.execute("INSERT OR IGNORE INTO sent(user_id, item, day) VALUES(?,?,?)", (row["user_id"], item, day))
-            DB.commit()
-            if cur.rowcount:  # ещё не отправляли сегодня
-                await send(bot, row["user_id"], text)
+            if await DB.mark_sent(user_id, item, day):  # ещё не отправляли сегодня
+                await send(bot, user_id, text)
 
 
 async def reminder_loop(bot: Bot) -> None:
@@ -360,9 +559,8 @@ async def reminder_loop(bot: Bot) -> None:
         try:
             await check_reminders(bot)
             ticks += 1
-            if ticks % 120 == 0:  # раз в час чистим старые отметки об отправке
-                DB.execute("DELETE FROM sent WHERE day < date('now', '-3 day')")
-                DB.commit()
+            if ticks % 120 == 0:  # раз в час чистим память, раз в сутки — базу
+                await DB.prune_sent(db=ticks % 2880 == 0)
         except Exception:
             log.exception("reminder loop error")
         await asyncio.sleep(30)
@@ -384,9 +582,10 @@ async def main() -> None:
     global BOT_USERNAME
     if not BOT_TOKEN or not WEBAPP_URL.startswith("https://"):
         raise SystemExit("Задай переменные окружения BOT_TOKEN и WEBAPP_URL (адрес должен начинаться с https://)")
-    init_db()
+    await DB.open()
     bot = Bot(BOT_TOKEN)
     dp = Dispatcher()
+    dp.message.outer_middleware(TrackUsers())
     dp.include_router(router)
 
     runner = web.AppRunner(build_app())
@@ -411,6 +610,7 @@ async def main() -> None:
         reminders.cancel()
         await runner.cleanup()
         await bot.session.close()
+        await DB.close()
 
 
 if __name__ == "__main__":
