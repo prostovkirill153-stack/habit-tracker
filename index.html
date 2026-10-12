@@ -483,6 +483,29 @@ input{font:inherit;color:var(--text)}
 /* тема «Полночь» */
 body.midnight{--grad:linear-gradient(135deg,#2563eb 0%,#0ea5e9 55%,#22d3ee 100%);--purple:#7cc4ff}
 body.midnight .hero,body.midnight .scard{box-shadow:0 22px 44px -22px rgba(14,165,233,.75)}
+/* ---------- панель владельца ---------- */
+.iconbtn.crown{color:var(--gold)}
+.adm .tiles4{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.chart{display:flex;align-items:flex-end;gap:3px;height:120px;margin-top:6px}
+.chart i{flex:1;border-radius:4px 4px 2px 2px;background:var(--grad);min-height:3px;transform-origin:bottom;animation:grow .7s var(--ease) both;animation-delay:calc(var(--j) * 14ms)}
+.chart.teal i{background:linear-gradient(to top,#1fae8c,#3fd6ab)}
+.chart i.z{background:var(--soft)}
+@keyframes grow{from{transform:scaleY(0)}to{transform:scaleY(1)}}
+.chx{display:flex;justify-content:space-between;color:var(--hint);font-size:11px;font-weight:700;margin-top:6px}
+.ret{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.ret .tile b{font-size:22px}
+.kv{display:flex;align-items:center;gap:10px;padding:8px 0}
+.kv+.kv{border-top:1px solid var(--line)}
+.kv span{flex:1;font-weight:700;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.kv b{font-weight:800}
+.kv .pb{flex:1.2;height:8px}
+.lim{margin-bottom:12px}
+.lim .hb-h span:last-child{color:var(--hint);font-weight:700}
+.lim .pb i{background:linear-gradient(90deg,#3fd6ab,#5aa8ff)}
+.lim.warn .pb i{background:linear-gradient(90deg,#ffc35a,#ff6b6b)}
+.cmdl{font-size:13px;color:var(--hint);font-weight:600;line-height:1.6}
+.cmdl code{color:var(--text);font-weight:800;font-family:inherit;background:var(--soft);padding:1px 6px;border-radius:6px}
+.fbbtn{margin-top:4px}
 @media (prefers-reduced-motion:reduce){
   .view.enter.push,.view.enter .st{animation-name:fadeIn}
   .lvup .conf,.cele-parts{display:none}
@@ -574,6 +597,10 @@ const ICONS = {
   lock: '<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
   info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>',
   clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+  crown: '<path d="M11.56 3.27a.5.5 0 0 1 .88 0l2.95 5.6a1 1 0 0 0 1.52.29l4.27-3.66a.5.5 0 0 1 .82.5L19.18 16a1 1 0 0 1-.96.74H5.78a1 1 0 0 1-.96-.74L2.02 6a.5.5 0 0 1 .82-.5l4.27 3.66a1 1 0 0 0 1.52-.29z"/><path d="M5 21h14"/>',
+  chat: '<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/>',
+  users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
+  link: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
   arrowup: '<path d="M12 19V5M5 12l7-7 7 7"/>', arrowdown: '<path d="M12 5v14M19 12l-7 7-7-7"/>',
   zap: '<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>',
 };
@@ -624,7 +651,8 @@ const S = {
   habits: [], log: {}, cfg: JSON.parse(JSON.stringify(DEF_CFG)), cfgDraft: null,
   tab: 'today', view: 'main', sel: todayKey(), detailId: null, form: null, formBack: 'main', calOff: 0, statP: 'month',
   lastToday: todayKey(), lastView: null, sim: null, pulse: null,
-  td: { d: '', t: {} }, meta: { lvl: 0, upd: '', theme: '' }, league: null, leagueErr: false, leagueLoading: false,
+  td: { d: '', t: {} }, meta: { lvl: 0, upd: '', theme: '', gifts: [] }, league: null, leagueErr: false, leagueLoading: false,
+  isAdmin: false, news: null, bot: '', admin: null, adminErr: false,
 };
 const A = {}; // прошлые значения для анимаций
 
@@ -777,7 +805,9 @@ function streakSim() {
   if (!S.habits.length) return r;
   let k = S.habits.reduce((m, h) => (h.created < m ? h.created : m), t), streak = 0;
   r.first = k;
+  const gifts = (S.meta.gifts || []).map(g => ({ day: g.day, n: g.n, used: false }));
   for (let i = 0; i < 4000 && k <= t; i++) {
+    for (const g of gifts) if (!g.used && g.day <= k) { r.freezes += g.n; g.used = true; }   // подарки владельца
     const hs = S.habits.filter(h => scheduled(h, k)), mult = streak >= XP_MULT_FROM ? XP_MULT : 1;
     let st;
     if (!hs.length) st = 'none';
@@ -836,8 +866,8 @@ function greeting() { const h = new Date().getHours(); return h < 5 ? 'Добр�
 function headToday() {
   const t = todayKey(), d = parse(t);
   return `<div class="head st" style="--i:0"><div><div class="date">${cap(WD_FULL[isoWd(t) - 1])}, ${d.getDate()} ${MONTHS[d.getMonth()]}</div>
-    <h1 class="h1">${greeting()}</h1></div><div class="headr">${lvChip()}<button class="iconbtn" data-act="reminders" aria-label="Напоминания">${ic('bell', 20)}</button></div></div>`
-    + (S.meta.upd !== UPD_VER ? `<button class="upd st" style="--i:1" data-act="whatsnew"><span class="nb">NEW</span><span class="t">Обновление ${UPD_VER}: лига, уровни и XP<small>Нажми, чтобы узнать, что нового</small></span>${ic('right', 18, 2.4)}</button>` : '');
+    <h1 class="h1">${greeting()}</h1></div><div class="headr">${S.isAdmin ? `<button class="iconbtn crown" data-act="admin" aria-label="Панель владельца">${ic('crown', 20, 2.2)}</button>` : ''}${lvChip()}<button class="iconbtn" data-act="reminders" aria-label="Напоминания">${ic('bell', 20)}</button></div></div>`
+    + (S.meta.upd !== newsVer() ? `<button class="upd st" style="--i:1" data-act="whatsnew"><span class="nb">NEW</span><span class="t">${esc(newsTitle())}<small>Нажми, чтобы узнать, что нового</small></span>${ic('right', 18, 2.4)}</button>` : '');
 }
 function lvChip() {
   const sim = S.sim, l = sim.level, p = (sim.xp - levelStart(l)) / (levelStart(l + 1) - levelStart(l));
@@ -1138,7 +1168,21 @@ function levelUp(l, preview) {
     ov.classList.remove('show'); setTimeout(() => ov.remove(), 350);
   });
 }
+const newsVer = () => S.news && S.news.ver ? 'n' + S.news.ver : UPD_VER;
+const newsTitle = () => S.news && S.news.title ? S.news.title : `Обновление ${UPD_VER}: лига, уровни и XP`;
+function feedbackLink() {
+  if (!S.bot) { toast('Напиши боту команду /feedback'); return; }
+  const u = `https://t.me/${S.bot}?start=feedback`;
+  if (inTG && ver('6.1')) tg.openTelegramLink(u); else window.open(u, '_blank');
+}
 function whatsNew() {
+  if (S.news && S.news.title) {
+    const its = (S.news.items || []).map(t => `<li><span class="wi">${ic('star', 20, 2.2)}</span><div><span style="color:var(--text);font-weight:700;font-size:14px">${esc(t)}</span></div></li>`).join('');
+    overlay(`<div class="wn"><h3>${esc(S.news.title)}</h3><div class="ver">Что нового</div><ul>${its}</ul></div>
+      <button class="btn" data-r="ok">Понятно</button><button class="btn dark fbbtn" data-r="fb">${ic('chat', 18, 2.2)}Написать автору</button>`,
+      r => { if (r === 'fb') feedbackLink(); if (S.meta.upd !== newsVer()) { S.meta.upd = newsVer(); saveMeta(); render(); } });
+    return;
+  }
   const items = [
     ['trophy', 'Лига', 'Соревнуйся с другими по XP за неделю. Топ-5 группы переходят в лигу выше.'],
     ['star', 'Уровни и XP', '+10 XP за привычку, +20 за закрытый день, ×1,5 при серии от 7 дней.'],
@@ -1147,7 +1191,89 @@ function whatsNew() {
     ['snow', 'Заморозки по уровням', 'Сначала 1 слот, с 5 уровня — 2, с 8 уровня — 3.'],
   ];
   overlay(`<div class="wn"><h3>Что нового</h3><div class="ver">Версия ${UPD_VER}</div><ul>${items.map(([i, b, t]) => `<li><span class="wi">${ic(i, 20, 2.2)}</span><div><b>${b}</b><span>${t}</span></div></li>`).join('')}</ul></div>
-    <button class="btn" data-r="ok">Понятно</button>`, () => { if (S.meta.upd !== UPD_VER) { S.meta.upd = UPD_VER; saveMeta(); render(); } });
+    <button class="btn" data-r="ok">Понятно</button><button class="btn dark fbbtn" data-r="fb">${ic('chat', 18, 2.2)}Написать автору</button>`,
+    r => { if (r === 'fb') feedbackLink(); if (S.meta.upd !== newsVer()) { S.meta.upd = newsVer(); saveMeta(); render(); } });
+}
+
+/* ---------- панель владельца ---------- */
+function bars(vals, cls = '') {
+  const mx = Math.max(1, ...vals);
+  return `<div class="chart ${cls}">${vals.map((v, j) => `<i class="${v ? '' : 'z'}" style="--j:${j};height:${Math.max(3, v / mx * 100)}%" title="${v}"></i>`).join('')}</div>`;
+}
+function shortDay(d) { const x = parse(d); return `${x.getDate()} ${MONTHS[x.getMonth()].slice(0, 3)}`; }
+function viewAdmin() {
+  const nav = `<div class="nav"><button class="back" data-act="back">${ic('left', 20, 2.4)}Назад</button><button class="navnote" data-act="adminreload">Обновить</button></div>
+    <h1 class="h1 st" style="--i:0;font-size:28px;margin:0 0 16px">Панель владельца</h1>`;
+  const D = S.admin;
+  if (!D) return [nav + (S.adminErr ? `<div class="card lgempty"><p>Не удалось загрузить данные</p><button class="btn" data-act="adminreload">Повторить</button></div>`
+    : Array.from({ length: 5 }, () => '<div class="skel" style="height:110px"></div>').join('')), ''];
+  const st = D.stats, sr = D.series, rt = D.retention, lm = D.limits, n = sr.days.length;
+  const sum = a => a.reduce((x, y) => x + y, 0);
+  const retTile = (k, l) => { const r = rt[k]; return `<div class="tile"><b>${r.pct === null ? '—' : r.pct + '%'}</b><span>${l}${r.cohort ? ` · ${r.ok} из ${r.cohort}` : ''}</span></div>`; };
+  const srcMax = Math.max(1, ...D.sources.map(x => x[1]));
+  const srcs = D.sources.length ? D.sources.map(([s2, c]) => `<div class="kv"><span>${esc(s2)}</span><div class="pb"><i data-a="w" data-k="src${s2}" data-v="${c / srcMax}"></i></div><b>${c}</b></div>`).join('') : '<div class="small">Пока нет данных</div>';
+  const habs = D.habits.length ? D.habits.map(([h, c]) => `<div class="kv"><span>${esc(h)}</span><b>${c} чел.</b></div>`).join('')
+    : '<div class="small">Появятся, когда одну и ту же привычку заведут хотя бы 3 человека — чтобы не раскрывать чьи-то личные списки.</div>';
+  const lg = D.league.map(x => `<div class="kv"><span>${esc(x.name)}</span><b>${x.players} чел.${x.groups > 1 ? ` · ${x.groups} гр.` : ''}</b></div>`).join('');
+  const L = lm.limits, limRow = (title, used, max, unit, note) => {
+    if (used === null || used === undefined) return `<div class="lim"><div class="hb-h"><span>${title}</span><span style="white-space:nowrap;color:var(--hint)">${note || '—'}</span></div></div>`;
+    const p = Math.min(1, used / max);
+    return `<div class="lim${p >= .8 ? ' warn' : ''}"><div class="hb-h"><span>${title}</span><span>${String(used).replace('.', ',')} из ${max} ${unit}</span></div><div class="pb"><i data-a="w" data-k="lim${title}" data-v="${p}"></i></div></div>`;
+  };
+  const bot = D.bot || 'бот';
+  const body = nav + `<div class="adm">
+    <div class="tiles4 st" style="--i:1">
+      <div class="tile"><div class="tl">${ic('users', 15, 2.4)}Всего</div><b data-c="${st.total}" data-k="adt">${st.total}</b><span>+${st.new1} за сутки · +${st.new7} за неделю</span></div>
+      <div class="tile"><div class="tl">${ic('flame', 15, 2.4)}Активные</div><b>${st.act1}</b><span>за сутки · ${st.act7} за неделю</span></div>
+      <div class="tile"><div class="tl">${ic('trophy', 15, 2.2)}В лиге</div><b>${st.league}</b><span>на этой неделе</span></div>
+      <div class="tile"><div class="tl">${ic('ban', 15, 2.2)}Заблокировали</div><b>${st.blocked}</b><span>бота</span></div></div>
+    <div class="card st" style="--i:2"><div class="card-h"><b>Новые пользователи</b><span>${sum(sr.new)} за 30 дней</span></div>${bars(sr.new)}
+      <div class="chx"><span>${shortDay(sr.days[0])}</span><span>${shortDay(sr.days[Math.floor(n / 2)])}</span><span>сегодня</span></div></div>
+    <div class="card st" style="--i:3"><div class="card-h"><b>Активные по дням</b><span>сегодня ${sr.active[n - 1]}</span></div>${bars(sr.active, 'teal')}
+      <div class="chx"><span>${shortDay(sr.days[0])}</span><span>${shortDay(sr.days[Math.floor(n / 2)])}</span><span>сегодня</span></div></div>
+    <div class="sec st" style="--i:4"><h2>Удержание</h2><span>вернулись через N дней</span></div>
+    <div class="ret st" style="--i:4">${retTile('d1', 'D1')}${retTile('d7', 'D7')}${retTile('d30', 'D30')}</div>
+    <div class="small st" style="--i:4;margin:8px 4px 0">Считается с 12 октября 2026 — до этого посещения по дням не записывались.</div>
+    <div class="card st" style="--i:5;margin-top:12px"><div class="card-h"><b>Источники</b><span>метки ссылок</span></div>${srcs}
+      <div class="cmdl" style="margin-top:8px">Ссылка с меткой: <code>t.me/${esc(bot)}?start=insta</code></div></div>
+    <div class="card st" style="--i:6"><div class="card-h"><b>Популярные привычки</b><span>от 3 человек</span></div>${habs}</div>
+    <div class="card st" style="--i:7"><div class="card-h"><b>Лига</b><span>эта неделя</span></div>${lg}</div>
+    <div class="card st" style="--i:8"><div class="card-h"><b>Лимиты бесплатных сервисов</b><span>${D.storage === 'postgres' ? 'Neon + Render' : 'SQLite'}</span></div>
+      ${limRow('База данных', lm.db_mb, L.db_mb, 'МБ')}
+      ${limRow('Neon, часы вычислений', lm.neon_cu_h, L.neon_cu_h, 'ч', 'нет ключа API')}
+      ${limRow('Render, часы в этом месяце', lm.render_h, L.render_h, 'ч')}
+      <div class="small">Если что-то подберётся к 80%, это будет видно в ежедневном отчёте.</div></div>
+    <div class="card st" style="--i:9"><div class="card-h"><b>Команды в чате с ботом</b></div><div class="cmdl">
+      <code>/broadcast</code> рассылка · <code>/news</code> плашка «Что нового» · <code>/gift</code> подарить заморозки ·
+      <code>/league</code> группы лиги · <code>/ban</code> исключить · <code>/report</code> отчёт · <code>/admin</code> все команды.<br>
+      Отчёт приходит каждый день в ${D.reportHour}:00 МСК, ошибки бота — сразу.</div></div></div>`;
+  return [body, ''];
+}
+async function loadAdmin() {
+  if (!inTG) return;
+  S.adminErr = false;
+  try {
+    const r = await fetch(API_BASE + '/api/admin', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ initData: tg.initData }) });
+    const j = await r.json(); if (!j.ok) throw new Error('admin');
+    S.admin = j;
+  } catch (e) { S.adminErr = !S.admin; }
+  if (S.view === 'admin') { S.lastView = null; render(); }
+}
+async function whoami() {
+  if (!inTG) return;
+  try {
+    const r = await fetch(API_BASE + '/api/whoami', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ initData: tg.initData }) });
+    const j = await r.json(); if (!j.ok) return;
+    const before = JSON.stringify(S.meta.gifts || []), had = S.isAdmin, hadNews = S.news && S.news.ver;
+    S.isAdmin = !!j.admin; S.news = j.news || null; S.bot = j.bot || '';
+    const gifts = (j.gifts || []).map(g => ({ day: g.day, n: g.n }));
+    if (JSON.stringify(gifts) !== before) {
+      const add = gifts.reduce((a, g) => a + g.n, 0) - (S.meta.gifts || []).reduce((a, g) => a + g.n, 0);
+      S.meta.gifts = gifts; saveMeta();
+      if (add > 0) toast(`🎁 Тебе подарили ${add} ${plural(add, 'заморозку', 'заморозки', 'заморозок')}!`);
+    }
+    if (S.view === 'main' && (had !== S.isAdmin || (S.news && S.news.ver) !== hadNews || JSON.stringify(gifts) !== before)) render();
+  } catch (e) { /* бот недоступен */ }
 }
 
 /* ---------- экран лиги ---------- */
@@ -1173,6 +1299,8 @@ function viewLeague() {
   if (!L) return [head + (S.leagueErr
     ? `<div class="card lgempty"><p>Не удалось загрузить лигу</p><button class="btn" data-act="lgretry">Повторить</button></div>`
     : Array.from({ length: 6 }, () => '<div class="skel"></div>').join('')), ''];
+  if (L.banned) return [head + `<div class="card lgempty st" style="--i:1"><p>Ты исключён из лиги на этой неделе. Если это ошибка — напиши автору.</p>
+    <button class="btn dark" data-act="feedback">${ic('chat', 18, 2.2)}Написать автору</button></div>`, ''];
   const tier = L.tier, names = L.leagues, me = L.rows.find(r => r.me), place = L.place;
   const shields = names.map((_, i) => shield(i + 1, i + 1 === tier ? 86 : 46, i + 1 < tier ? 'got' : i + 1 === tier ? 'cur' : 'lock')).join('');
   let rows = '';
@@ -1263,7 +1391,7 @@ function render() {
   S.sim = streakSim();
   const viewId = S.view === 'main' ? 'main-' + S.tab : S.view, entering = viewId !== S.lastView;
   applyTheme();
-  const [body, bottom] = S.view === 'detail' ? viewDetail() : S.view === 'form' ? viewForm() : S.view === 'level' ? viewLevel()
+  const [body, bottom] = S.view === 'detail' ? viewDetail() : S.view === 'form' ? viewForm() : S.view === 'level' ? viewLevel() : S.view === 'admin' ? viewAdmin()
     : S.view === 'reminders' ? viewReminders() : S.tab === 'today' ? viewToday() : S.tab === 'stats' ? viewStats()
     : S.tab === 'league' ? viewLeague() : viewStreak();
   const animCls = entering ? (S.view === 'main' ? ' enter fade' : ' enter push') : '';
@@ -1338,6 +1466,9 @@ const actions = {
   level: () => { hap.sel(); go('level'); },
   lvpreview: () => levelUp(S.sim.level + 1, true),
   whatsnew: () => whatsNew(),
+  admin: () => { hap.sel(); go('admin'); loadAdmin(); },
+  adminreload: () => { S.admin = null; render(); loadAdmin(); },
+  feedback: () => feedbackLink(),
   lghow: () => leagueHow(),
   lgretry: () => { S.leagueErr = false; render(); loadLeague(); },
   invite: () => shareText('🔥 Давай соревноваться в лиге трекера привычек! Кто больше XP за неделю?'),
@@ -1452,6 +1583,7 @@ actions.undo = () => undoDelete();
   if (!S.meta.lvl) { S.meta.lvl = sim0.level; saveMeta(); }     // первый запуск после обновления — без салюта
   render();
   if (sim0.level > S.meta.lvl) { S.meta.lvl = sim0.level; saveMeta(); setTimeout(() => levelUp(sim0.level), 600); }
+  whoami();
   setTimeout(loadLeague, 2500);
   scheduleSync();
   if (inTG && ver('6.1')) tg.BackButton.onClick(goBack);

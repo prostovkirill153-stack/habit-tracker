@@ -7,6 +7,8 @@
   * хранит данные в Postgres (Neon), если задан DATABASE_URL, иначе в локальной SQLite
   * считает пользователей; владелец видит статистику командой /stats
   * ведёт еженедельную лигу по XP (5 лиг, группы до 30 человек, топ-5 поднимаются выше)
+  * для владельца: ежедневный отчёт, панель с графиками, рассылка, отзывы, «Что нового», подарки,
+    управление лигой, оповещения об ошибках и о лимитах бесплатных сервисов (команда /admin)
   * присылает напоминания:
       - по привычкам (в заданное время или каждые N часов), если привычка ещё не отмечена
       - «План на день» — утром список сегодняшних привычек
@@ -23,16 +25,21 @@ import os
 import re
 import sqlite3
 import time
+import traceback
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
+import aiohttp
 from aiohttp import web
-from aiogram import BaseMiddleware, Bot, Dispatcher, Router
-from aiogram.exceptions import TelegramAPIError
-from aiogram.filters import Command, CommandStart
+from aiogram import BaseMiddleware, Bot, Dispatcher, F, Router
+from aiogram.exceptions import TelegramAPIError, TelegramForbiddenError, TelegramRetryAfter
+from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.types import (
     BotCommand,
+    BotCommandScopeChat,
+    BotCommandScopeDefault,
+    CallbackQuery,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     MenuButtonWebApp,
@@ -50,6 +57,10 @@ PORT = int(os.environ.get("PORT", "8080"))
 DB_PATH = os.environ.get("DB_PATH", "habits.db")
 DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 ADMIN_ID = int(os.environ.get("ADMIN_ID", "0") or 0)
+NEON_API_KEY = os.environ.get("NEON_API_KEY", "").strip()        # необязательно: для учёта часов Neon
+NEON_PROJECT_ID = os.environ.get("NEON_PROJECT_ID", "").strip()
+REPORT_HOUR = int(os.environ.get("REPORT_HOUR", "9"))           # ежедневный отчёт владельцу, час по МСК
+LIMITS = {"db_mb": 512, "neon_cu_h": 100, "render_h": 750}      # бесплатные лимиты Neon и Render
 BASE_DIR = Path(__file__).resolve().parent
 
 TIME_RE = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
@@ -68,6 +79,14 @@ def league_week(now: datetime | None = None) -> tuple[str, int]:
     end = datetime(monday.year, monday.month, monday.day, tzinfo=timezone.utc) + timedelta(days=7) - LEAGUE_TZ
     return monday.isoformat(), int(end.timestamp())
 
+
+def msk_day(ts: float | None = None) -> str:
+    """Дата по Москве для статистики и отчётов."""
+    dt = datetime.fromtimestamp(ts, timezone.utc) if ts is not None else datetime.now(timezone.utc)
+    return (dt + LEAGUE_TZ).strftime("%Y-%m-%d")
+
+
+SOURCE_RE = re.compile(r"^[A-Za-z0-9_-]{1,32}$")
 
 DEFAULT_CFG = {
     "plan": {"on": True, "time": "09:00"},
@@ -106,6 +125,24 @@ SCHEMA = [
         grp     INTEGER NOT NULL,
         xp      INTEGER NOT NULL DEFAULT 0,
         PRIMARY KEY(week, user_id))""",
+    """CREATE TABLE IF NOT EXISTS activity(
+        day     TEXT   NOT NULL,
+        user_id BIGINT NOT NULL,
+        PRIMARY KEY(day, user_id))""",
+    """CREATE TABLE IF NOT EXISTS gifts(
+        user_id BIGINT  NOT NULL,
+        created BIGINT  NOT NULL,
+        day     TEXT    NOT NULL,
+        n       INTEGER NOT NULL,
+        PRIMARY KEY(user_id, created))""",
+]
+# новые колонки в старых таблицах (ошибка «колонка уже есть» игнорируется)
+MIGRATIONS = [
+    "ALTER TABLE users ADD COLUMN source TEXT",
+    "ALTER TABLE users ADD COLUMN username TEXT",
+    "ALTER TABLE users ADD COLUMN name TEXT",
+    "ALTER TABLE users ADD COLUMN blocked INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE players ADD COLUMN banned INTEGER NOT NULL DEFAULT 0",
 ]
 
 
@@ -134,6 +171,14 @@ class Store:
         self.league: dict[int, dict] = {}    # user_id -> {tier, grp, xp} за self.week
         self.league_done: str | None = None  # последняя неделя, по которой подведены итоги
         self.league_checked = ""             # неделя, на которой последний раз проверяли итоги
+        self.admin: int | None = None        # владелец (кэш)
+        self.admin_loaded = False
+        self.active: set[tuple[str, int]] = set()  # кто уже отмечен активным сегодня
+        self.report_day = ""                 # день, за который отправлен отчёт владельцу
+        self.news: dict | None = None        # плашка «Что нового» от владельца
+        self.awaiting_fb: set[int] = set()   # кто сейчас пишет отзыв
+        self.reply_to: dict[int, int] = {}   # владелец отвечает пользователю
+        self.pending_bc: dict[int, str] = {} # рассылка ждёт подтверждения
 
     @property
     def kind(self) -> str:
@@ -149,6 +194,11 @@ class Store:
             self.lite.row_factory = sqlite3.Row
         for stmt in SCHEMA:
             await self.execute(stmt)
+        for stmt in MIGRATIONS:
+            try:
+                await self.execute(stmt.replace("ADD COLUMN", "ADD COLUMN IF NOT EXISTS") if self.pool else stmt)
+            except Exception:  # SQLite: колонка уже есть
+                pass
         # пользователи, которые уже настраивали напоминания, тоже считаются
         now = int(time.time())
         await self.execute(
@@ -159,8 +209,16 @@ class Store:
                          for r in await self.fetch("SELECT user_id, tz_offset, data FROM profiles")}
         self.sent = {(r["user_id"], r["item"], r["day"])
                      for r in await self.fetch("SELECT user_id, item, day FROM sent")}
-        self.players = {r["user_id"]: {"tier": r["tier"], "name": r["name"]}
-                        for r in await self.fetch("SELECT user_id, tier, name FROM players")}
+        self.players = {r["user_id"]: {"tier": r["tier"], "name": r["name"], "banned": bool(r["banned"])}
+                        for r in await self.fetch("SELECT user_id, tier, name, banned FROM players")}
+        today = msk_day()
+        self.active = {(today, r["user_id"]) for r in await self.fetch("SELECT user_id FROM activity WHERE day = $1", today)}
+        meta = {r["k"]: r["v"] for r in await self.fetch("SELECT k, v FROM meta")}
+        self.report_day = meta.get("report_day", "")
+        try:
+            self.news = json.loads(meta["news"]) if meta.get("news") else None
+        except ValueError:
+            self.news = None
         self.week = league_week()[0]
         self.league = {r["user_id"]: {"tier": r["tier"], "grp": r["grp"], "xp": r["xp"]}
                        for r in await self.fetch("SELECT user_id, tier, grp, xp FROM league WHERE week = $1", self.week)}
@@ -228,7 +286,7 @@ class Store:
     async def set_player(self, user_id: int, name: str) -> dict:
         p = self.players.get(user_id)
         if p is None:
-            p = self.players[user_id] = {"tier": 1, "name": name}
+            p = self.players[user_id] = {"tier": 1, "name": name, "banned": False}
             await self.execute("INSERT INTO players(user_id, tier, name) VALUES($1, 1, $2) ON CONFLICT(user_id) DO NOTHING",
                                user_id, name)
         elif name and p["name"] != name:
@@ -236,12 +294,14 @@ class Store:
             await self.execute("UPDATE players SET name = $1 WHERE user_id = $2", name, user_id)
         return p
 
-    async def league_update(self, user_id: int, name: str, xp: int) -> dict:
+    async def league_update(self, user_id: int, name: str, xp: int) -> dict | None:
         """Вступает в лигу текущей недели (если ещё нет) и обновляет недельный XP."""
         week = league_week()[0]
         if week != self.week:  # неделя сменилась, итоги подведёт league_tick
             self.week, self.league = week, {}
         p = await self.set_player(user_id, name)
+        if p.get("banned"):
+            return None
         row = self.league.get(user_id)
         if row is None:
             counts: dict[int, int] = {}
@@ -264,25 +324,48 @@ class Store:
         return sorted(group, key=lambda x: (-x[1]["xp"], x[0]))
 
     # --- пользователи и статистика ---
-    async def touch_user(self, user_id: int, opened: bool = False) -> None:
+    async def touch_user(self, user_id: int, opened: bool = False, username: str | None = None,
+                         name: str | None = None, source: str | None = None) -> None:
         now = int(time.time())
         await self.execute(
-            """INSERT INTO users(user_id, first_seen, last_seen, last_open) VALUES($1, $2, $2, $3)
+            """INSERT INTO users(user_id, first_seen, last_seen, last_open, username, name, source, blocked)
+               VALUES($1, $2, $2, $3, $4, $5, $6, 0)
                ON CONFLICT(user_id) DO UPDATE SET last_seen = excluded.last_seen,
-               last_open = COALESCE(excluded.last_open, users.last_open)""",
-            user_id, now, now if opened else None)
+               last_open = COALESCE(excluded.last_open, users.last_open),
+               username = COALESCE(excluded.username, users.username),
+               name = COALESCE(excluded.name, users.name),
+               source = COALESCE(users.source, excluded.source), blocked = 0""",
+            user_id, now, now if opened else None, username, name, source)
+        day = msk_day(now)
+        if (day, user_id) not in self.active:
+            if any(d != day for d, _ in list(self.active)[:1]):
+                self.active = set()
+            self.active.add((day, user_id))
+            await self.execute("INSERT INTO activity(day, user_id) VALUES($1, $2) ON CONFLICT DO NOTHING", day, user_id)
+
+    async def set_blocked(self, user_id: int) -> None:
+        await self.execute("UPDATE users SET blocked = 1 WHERE user_id = $1", user_id)
 
     async def admin_id(self) -> int | None:
         if ADMIN_ID:
             return ADMIN_ID
-        v = await self.fetchval("SELECT v FROM meta WHERE k = 'admin_id'")
-        return int(v) if v else None
+        if not self.admin_loaded:
+            v = await self.fetchval("SELECT v FROM meta WHERE k = 'admin_id'")
+            self.admin, self.admin_loaded = (int(v) if v else None), True
+        return self.admin
 
     async def claim_admin(self, user_id: int) -> int | None:
         """Первый, кто отправит /stats, становится владельцем (если ADMIN_ID не задан)."""
         if not ADMIN_ID:
             await self.execute("INSERT INTO meta(k, v) VALUES('admin_id', $1) ON CONFLICT(k) DO NOTHING", str(user_id))
+            self.admin_loaded = False
         return await self.admin_id()
+
+    async def set_meta(self, k: str, v: str | None) -> None:
+        if v is None:
+            await self.execute("DELETE FROM meta WHERE k = $1", k)
+        else:
+            await self.execute("INSERT INTO meta(k, v) VALUES($1, $2) ON CONFLICT(k) DO UPDATE SET v = excluded.v", k, v)
 
 
 DB = Store(DATABASE_URL, DB_PATH)
@@ -299,7 +382,8 @@ async def collect_stats() -> dict:
              SUM(CASE WHEN last_seen  >= $2 THEN 1 ELSE 0 END) AS act7,
              SUM(CASE WHEN last_seen  >= $3 THEN 1 ELSE 0 END) AS act30,
              SUM(CASE WHEN last_open IS NOT NULL THEN 1 ELSE 0 END) AS opened,
-             SUM(CASE WHEN last_open >= $2 THEN 1 ELSE 0 END) AS opened7
+             SUM(CASE WHEN last_open >= $2 THEN 1 ELSE 0 END) AS opened7,
+             SUM(CASE WHEN blocked = 1 THEN 1 ELSE 0 END) AS blocked
            FROM users""", d1, d7, d30))[0]
     st = {k: int(v or 0) for k, v in row.items()}
     habits_total = with_habits = with_reminders = 0
@@ -329,9 +413,146 @@ def stats_text(st: dict) -> str:
         f"📱 Открывали трекер: всего — {st['opened']}, за 7 дней — {st['opened7']}\n"
         f"📋 С привычками: {st['with_habits']} (в среднем {st['avg_habits']} на человека)\n"
         f"🔔 С напоминаниями по привычкам: {st['with_reminders']}\n"
-        f"🏆 В лиге на этой неделе: {st['league']}\n\n"
-        f"🗄 База: {storage}"
+        f"🏆 В лиге на этой неделе: {st['league']}\n"
+        f"🚫 Заблокировали бота: {st['blocked']}\n\n"
+        f"🗄 База: {storage}\n"
+        "Все команды владельца — /admin"
     )
+
+
+# ---------- аналитика для владельца ----------
+async def series(days: int = 30) -> dict:
+    """Новые и активные пользователи по дням (МСК) за последние N дней."""
+    today = datetime.strptime(msk_day(), "%Y-%m-%d")
+    labels = [(today - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(days - 1, -1, -1)]
+    new = {d: 0 for d in labels}
+    for r in await DB.fetch("SELECT first_seen FROM users WHERE first_seen >= $1", int(time.time()) - (days + 1) * 86400):
+        d = msk_day(r["first_seen"])
+        if d in new:
+            new[d] += 1
+    act = {d: 0 for d in labels}
+    for r in await DB.fetch("SELECT day, COUNT(*) AS n FROM activity WHERE day >= $1 GROUP BY day", labels[0]):
+        if r["day"] in act:
+            act[r["day"]] = int(r["n"])
+    return {"days": labels, "new": [new[d] for d in labels], "active": [act[d] for d in labels]}
+
+
+async def retention() -> dict:
+    """D1/D7/D30: доля пользователей, вернувшихся ровно через 1, 7, 30 дней после первого визита."""
+    today = datetime.strptime(msk_day(), "%Y-%m-%d")
+    users = {r["user_id"]: msk_day(r["first_seen"]) for r in await DB.fetch("SELECT user_id, first_seen FROM users")}
+    seen = {(r["day"], r["user_id"]) for r in await DB.fetch("SELECT day, user_id FROM activity")}
+    out = {}
+    for n in (1, 7, 30):
+        cohort = ok = 0
+        for uid, d0 in users.items():
+            first = datetime.strptime(d0, "%Y-%m-%d")
+            if first + timedelta(days=n) > today:
+                continue
+            cohort += 1
+            if ((first + timedelta(days=n)).strftime("%Y-%m-%d"), uid) in seen:
+                ok += 1
+        out[f"d{n}"] = {"cohort": cohort, "ok": ok, "pct": round(ok / cohort * 100) if cohort else None}
+    return out
+
+
+def popular_habits(min_users: int = 3) -> list[list]:
+    """Самые частые названия привычек. Показываем только те, что есть хотя бы у 3 человек, — чтобы не раскрывать чьи-то личные."""
+    counts: dict[str, int] = {}
+    for _tz, raw in DB.profiles.values():
+        try:
+            names = {h.get("name", "").strip().lower() for h in json.loads(raw).get("habits", [])}
+        except ValueError:
+            continue
+        for n in names:
+            if n:
+                counts[n] = counts.get(n, 0) + 1
+    top = sorted(((n.capitalize(), c) for n, c in counts.items() if c >= min_users), key=lambda x: -x[1])
+    return [list(x) for x in top[:10]]
+
+
+async def sources() -> list[list]:
+    rows = await DB.fetch("SELECT COALESCE(source, '') AS s, COUNT(*) AS n FROM users GROUP BY COALESCE(source, '') ORDER BY n DESC")
+    return [[r["s"] or "без метки", int(r["n"])] for r in rows]
+
+
+def league_summary() -> list[dict]:
+    out = []
+    for t, name in enumerate(LEAGUES, 1):
+        rows = [r for r in DB.league.values() if r["tier"] == t]
+        out.append({"tier": t, "name": name, "players": len(rows), "groups": len({r["grp"] for r in rows}),
+                    "xp": sum(r["xp"] for r in rows)})
+    return out
+
+
+async def limits() -> dict:
+    """Сколько потрачено из бесплатных лимитов."""
+    out = {}
+    try:
+        if DB.pool:
+            size = await DB.fetchval("SELECT pg_database_size(current_database())")
+        else:
+            size = os.path.getsize(DB.path) if os.path.exists(DB.path) else 0
+        out["db_mb"] = round(int(size) / 1024 / 1024, 1)
+    except Exception:
+        out["db_mb"] = None
+    now = datetime.now(timezone.utc)
+    out["render_h"] = int((now - now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)).total_seconds() // 3600)
+    out["neon_cu_h"] = None
+    if NEON_API_KEY and NEON_PROJECT_ID:
+        try:
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as cs:
+                async with cs.get(f"https://console.neon.tech/api/v2/projects/{NEON_PROJECT_ID}",
+                                  headers={"Authorization": f"Bearer {NEON_API_KEY}", "Accept": "application/json"}) as r:
+                    prj = (await r.json()).get("project", {})
+            secs = prj.get("compute_time_seconds", prj.get("cpu_used_sec"))
+            if secs is not None:
+                out["neon_cu_h"] = round(float(secs) / 3600, 1)
+        except Exception:
+            log.warning("neon api unavailable")
+    out["limits"] = LIMITS
+    return out
+
+
+def limits_text(lm: dict) -> str:
+    parts = []
+    if lm.get("db_mb") is not None:
+        pct = lm["db_mb"] / LIMITS["db_mb"] * 100
+        parts.append(f"{'⚠️ ' if pct >= 80 else ''}база {lm['db_mb']} из {LIMITS['db_mb']} МБ")
+    if lm.get("neon_cu_h") is not None:
+        pct = lm["neon_cu_h"] / LIMITS["neon_cu_h"] * 100
+        parts.append(f"{'⚠️ ' if pct >= 80 else ''}Neon ≈{lm['neon_cu_h']} из {LIMITS['neon_cu_h']} ч")
+    parts.append(f"Render ≈{lm['render_h']} из {LIMITS['render_h']} ч")
+    return " · ".join(parts)
+
+
+async def report_text() -> str:
+    """Отчёт за вчера (по МСК) + как идёт сегодня."""
+    today = msk_day()
+    yday = msk_day(time.time() - 86400)
+    sr = await series(8)
+    i_y, i_t = sr["days"].index(yday), sr["days"].index(today)
+    st = await collect_stats()
+    srcs = await sources()
+    lm = await limits()
+    d = datetime.strptime(yday, "%Y-%m-%d")
+    months = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря"]
+    week_act = len({uid for (dd, uid) in [(r["day"], r["user_id"]) for r in await DB.fetch(
+        "SELECT day, user_id FROM activity WHERE day >= $1", sr["days"][1])]})
+    lines = [
+        f"☀️ Отчёт за {d.day} {months[d.month - 1]}\n",
+        f"👥 Всего пользователей: {st['total']} (новых вчера: +{sr['new'][i_y]})",
+        f"🔥 Активных вчера: {sr['active'][i_y]} · за 7 дней: {week_act}",
+        f"🏆 В лиге на этой неделе: {st['league']}",
+        f"🚫 Заблокировали бота: {st['blocked']}",
+        f"📅 Сегодня пока: новых {sr['new'][i_t]}, активных {sr['active'][i_t]}",
+    ]
+    tagged = [f"{s} — {n}" for s, n in srcs if s != "без метки"][:5]
+    if tagged:
+        lines.append("🔗 Источники (всего): " + ", ".join(tagged))
+    lines.append(f"🗄 Лимиты: {limits_text(lm)}")
+    lines.append("\nПодробнее — панель 👑 в приложении или /stats")
+    return "\n".join(lines)
 
 
 # ---------- очистка данных от клиента ----------
@@ -503,15 +724,24 @@ class TrackUsers(BaseMiddleware):
     async def __call__(self, handler, event, data):
         user = getattr(event, "from_user", None)
         if user and not user.is_bot:
+            source = None
+            text = getattr(event, "text", None) or ""
+            if text.startswith("/start "):
+                payload = text.split(maxsplit=1)[1].strip()
+                if SOURCE_RE.match(payload) and payload != "feedback":
+                    source = payload
             try:
-                await DB.touch_user(user.id)
+                await DB.touch_user(user.id, username=(user.username or None), name=display_name(user), source=source)
             except Exception:
                 log.exception("touch_user failed")
         return await handler(event, data)
 
 
 @router.message(CommandStart())
-async def cmd_start(m: Message) -> None:
+async def cmd_start(m: Message, command: CommandObject) -> None:
+    if (command.args or "").strip() == "feedback":
+        await ask_feedback(m)
+        return
     await m.answer(
         "Привет! Это трекер привычек 🔥\n\n"
         "Выполняй все привычки за день — и огонёк загорится, а серия вырастет. "
@@ -529,6 +759,7 @@ async def cmd_help(m: Message) -> None:
         "3. Закрывай все привычки за день — огонёк 🔥 горит, серия растёт. Заморозки ❄️ спасают пропуски.\n"
         "4. Напоминания настраиваются в приложении — значок колокольчика.\n"
         "5. За отметки копятся XP и растут уровни, а в лиге можно соревноваться с другими за неделю 🏆\n\n"
+        "Есть идея или что-то сломалось? Напиши /feedback — сообщение придёт автору.\n"
         "Данные хранятся в облаке Telegram и доступны с любого устройства.",
         reply_markup=open_kb(),
     )
@@ -547,11 +778,275 @@ async def cmd_stats(m: Message) -> None:
     text = stats_text(await collect_stats())
     if first_time:
         text = "👑 Ты назначен владельцем бота — эта команда работает только у тебя.\n\n" + text
+        if getattr(m, "bot", None):
+            await set_admin_commands(m.bot, m.from_user.id)
     await m.answer(text)
+
+
+async def is_admin(m) -> bool:
+    return m.from_user is not None and await DB.admin_id() == m.from_user.id
+
+
+ADMIN_HELP = (
+    "👑 Команды владельца\n\n"
+    "/stats — сводка по пользователям\n"
+    "/report — отчёт прямо сейчас (сам приходит каждый день в {h}:00 МСК)\n"
+    "/broadcast текст — рассылка всем (с превью и подтверждением)\n"
+    "/news Заголовок + пункты с новой строки — плашка «Что нового» в приложении; /news off — убрать\n"
+    "/league — все группы лиги с ID участников\n"
+    "/ban ID — исключить из лиги · /unban ID — вернуть\n"
+    "/gift @username или ID [кол-во] — подарить заморозки (по умолчанию 1)\n"
+    "/cancel — отменить ответ или рассылку\n\n"
+    "🔗 Ссылки с меткой источника: t.me/{bot}?start=insta, t.me/{bot}?start=vk и т.п. — "
+    "метки видны в /stats, отчёте и панели.\n"
+    "📊 Графики, удержание и лимиты — кнопка 👑 в приложении.\n"
+    "⚠️ Если в боте случится ошибка, я пришлю её сюда."
+)
+
+
+@router.message(Command("admin"))
+async def cmd_admin(m: Message) -> None:
+    if not await is_admin(m):
+        return await any_message(m)
+    await m.answer(ADMIN_HELP.format(h=REPORT_HOUR, bot=BOT_USERNAME or "твой_бот"))
+
+
+@router.message(Command("report"))
+async def cmd_report(m: Message) -> None:
+    if not await is_admin(m):
+        return await any_message(m)
+    await m.answer(await report_text())
+
+
+# --- рассылка ---
+def bc_kb(n: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text=f"✅ Отправить ({n})", callback_data="bc:go"),
+        InlineKeyboardButton(text="✖ Отмена", callback_data="bc:no")]])
+
+
+@router.message(Command("broadcast"))
+async def cmd_broadcast(m: Message, command: CommandObject) -> None:
+    if not await is_admin(m):
+        return await any_message(m)
+    text = (command.args or "").strip()
+    if not text:
+        await m.answer("Напиши так: /broadcast Текст сообщения\nПеред отправкой я покажу превью.")
+        return
+    DB.pending_bc[m.from_user.id] = text[:3500]
+    n = int(await DB.fetchval("SELECT COUNT(*) FROM users WHERE blocked = 0") or 0)
+    await m.answer("👀 Так сообщение увидят пользователи:")
+    await m.answer(text[:3500], reply_markup=open_kb())
+    await m.answer(f"Отправить {n} {plural(n, 'пользователю', 'пользователям', 'пользователям')}?", reply_markup=bc_kb(n))
+
+
+async def run_broadcast(bot: Bot, admin: int, text: str) -> None:
+    ids = [r["user_id"] for r in await DB.fetch("SELECT user_id FROM users WHERE blocked = 0")]
+    ok = blocked = failed = 0
+    for uid in ids:
+        for attempt in (1, 2):
+            try:
+                await bot.send_message(uid, text, reply_markup=open_kb())
+                ok += 1
+            except TelegramRetryAfter as e:
+                if attempt == 1:
+                    await asyncio.sleep(e.retry_after + 1)
+                    continue
+                failed += 1
+            except TelegramForbiddenError:
+                blocked += 1
+                await DB.set_blocked(uid)
+            except TelegramAPIError:
+                failed += 1
+            break
+        await asyncio.sleep(0.05)  # не больше ~20 сообщений в секунду
+    await bot.send_message(admin, f"📤 Рассылка завершена\n✅ Доставлено: {ok}\n🚫 Заблокировали бота: {blocked}\n⚠️ Ошибки: {failed}")
+
+
+@router.callback_query(F.data.startswith("bc:"))
+async def cb_broadcast(c: CallbackQuery) -> None:
+    if not await is_admin(c):
+        await c.answer()
+        return
+    text = DB.pending_bc.pop(c.from_user.id, None)
+    if c.data == "bc:no" or not text:
+        await c.message.edit_text("Рассылка отменена." if c.data == "bc:no" else "Эта рассылка уже неактуальна.")
+        await c.answer()
+        return
+    await c.message.edit_text("📤 Отправляю… Сообщу, когда закончу.")
+    await c.answer()
+    asyncio.create_task(run_broadcast(c.bot, c.from_user.id, text))
+
+
+# --- обратная связь ---
+async def ask_feedback(m: Message) -> None:
+    DB.awaiting_fb.add(m.from_user.id)
+    await m.answer("✍️ Напиши одним сообщением идею, вопрос или что сломалось — я передам автору.\n/cancel — отмена")
+
+
+@router.message(Command("feedback"))
+async def cmd_feedback(m: Message, command: CommandObject) -> None:
+    text = (command.args or "").strip()
+    if text:
+        await deliver_feedback(m, text)
+    else:
+        await ask_feedback(m)
+
+
+async def deliver_feedback(m: Message, text: str) -> None:
+    DB.awaiting_fb.discard(m.from_user.id)
+    admin = await DB.admin_id()
+    u = m.from_user
+    if admin and admin != u.id:
+        who = display_name(u) + (f" (@{u.username})" if u.username else "") + f", id {u.id}"
+        kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="↩️ Ответить", callback_data=f"fb:{u.id}")]])
+        await m.bot.send_message(admin, f"💬 Отзыв от {who}:\n\n{text[:3500]}", reply_markup=kb)
+    log.info("feedback from %s", u.id)
+    await m.answer("Спасибо! Передал автору 🙌")
+
+
+@router.callback_query(F.data.startswith("fb:"))
+async def cb_feedback_reply(c: CallbackQuery) -> None:
+    if not await is_admin(c):
+        await c.answer()
+        return
+    DB.reply_to[c.from_user.id] = int(c.data.split(":", 1)[1])
+    await c.message.answer("Напиши ответ одним сообщением — я отправлю его пользователю.\n/cancel — отмена")
+    await c.answer()
+
+
+@router.message(Command("cancel"))
+async def cmd_cancel(m: Message) -> None:
+    uid = m.from_user.id
+    had = uid in DB.awaiting_fb or uid in DB.reply_to or uid in DB.pending_bc
+    DB.awaiting_fb.discard(uid)
+    DB.reply_to.pop(uid, None)
+    DB.pending_bc.pop(uid, None)
+    await m.answer("Отменено." if had else "Нечего отменять 🙂")
+
+
+# --- «Что нового» ---
+@router.message(Command("news"))
+async def cmd_news(m: Message, command: CommandObject) -> None:
+    if not await is_admin(m):
+        return await any_message(m)
+    args = (command.args or "").strip()
+    if not args:
+        cur = DB.news
+        now = f"Сейчас: «{cur['title']}» ({len(cur['items'])} пунктов)" if cur else "Сейчас показывается встроенное описание версии."
+        await m.answer(f"{now}\n\nЧтобы изменить:\n/news Заголовок\nпункт 1\nпункт 2\n\nУбрать свою плашку: /news off")
+        return
+    if args.lower() == "off":
+        DB.news = None
+        await DB.set_meta("news", None)
+        await m.answer("Плашка убрана — в приложении снова встроенное описание версии.")
+        return
+    lines = [ln.strip() for ln in args.split("\n") if ln.strip()]
+    DB.news = {"ver": str(int(time.time())), "title": lines[0][:80],
+               "items": [ln.lstrip("-•* ").strip()[:200] for ln in lines[1:]][:8]}
+    await DB.set_meta("news", json.dumps(DB.news, ensure_ascii=False))
+    items = "\n".join(f"• {x}" for x in DB.news["items"]) or "(без пунктов)"
+    await m.answer(f"✅ Плашка обновлена. Пользователи увидят её при следующем открытии:\n\n✨ {DB.news['title']}\n{items}")
+
+
+# --- лига ---
+@router.message(Command("league"))
+async def cmd_league(m: Message) -> None:
+    if not await is_admin(m):
+        return await any_message(m)
+    if not DB.league:
+        await m.answer("На этой неделе в лиге пока никого нет.")
+        return
+    out = [f"🏆 Лига, неделя с {DB.week}"]
+    for tier, grp in sorted({(r["tier"], r["grp"]) for r in DB.league.values()}):
+        group = DB.standings(tier, grp)
+        out.append(f"\n{LEAGUES[tier - 1]} · группа {grp + 1} ({len(group)})")
+        for i, (uid, r) in enumerate(group, 1):
+            out.append(f"{i}. {DB.players.get(uid, {}).get('name') or 'Игрок'} — {r['xp']} XP · {uid}")
+    text = "\n".join(out)
+    await m.answer(text[:3900] + ("\n…" if len(text) > 3900 else ""))
+
+
+async def set_ban(m: Message, command: CommandObject, banned: bool) -> None:
+    if not await is_admin(m):
+        return await any_message(m)
+    try:
+        uid = int((command.args or "").strip())
+    except ValueError:
+        await m.answer(f"Напиши так: /{'ban' if banned else 'unban'} ID (ID есть в /league)")
+        return
+    p = DB.players.setdefault(uid, {"tier": 1, "name": "", "banned": False})
+    p["banned"] = banned
+    await DB.execute("INSERT INTO players(user_id, tier, name, banned) VALUES($1, 1, '', $2) "
+                     "ON CONFLICT(user_id) DO UPDATE SET banned = excluded.banned", uid, int(banned))
+    if banned:
+        DB.league.pop(uid, None)
+        await DB.execute("DELETE FROM league WHERE week = $1 AND user_id = $2", DB.week, uid)
+    await m.answer(f"{'⛔ Исключён из лиги' if banned else '✅ Снова может участвовать в лиге'}: {p.get('name') or uid}")
+
+
+@router.message(Command("ban"))
+async def cmd_ban(m: Message, command: CommandObject) -> None:
+    await set_ban(m, command, True)
+
+
+@router.message(Command("unban"))
+async def cmd_unban(m: Message, command: CommandObject) -> None:
+    await set_ban(m, command, False)
+
+
+# --- подарки ---
+@router.message(Command("gift"))
+async def cmd_gift(m: Message, command: CommandObject) -> None:
+    if not await is_admin(m):
+        return await any_message(m)
+    parts = (command.args or "").split()
+    if not parts:
+        await m.answer("Напиши так: /gift @username 2  или  /gift 123456789 1")
+        return
+    who = parts[0]
+    n = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 1
+    n = max(1, min(5, n))
+    if who.startswith("@"):
+        uid = await DB.fetchval("SELECT user_id FROM users WHERE LOWER(username) = $1", who[1:].lower())
+    else:
+        uid = int(who) if who.isdigit() else None
+        if uid and not await DB.fetchval("SELECT user_id FROM users WHERE user_id = $1", uid):
+            uid = None
+    if not uid:
+        await m.answer("Не нашёл такого пользователя. Он должен хотя бы раз написать боту или открыть трекер.")
+        return
+    await DB.execute("INSERT INTO gifts(user_id, created, day, n) VALUES($1, $2, $3, $4)",
+                     int(uid), int(time.time() * 1000), msk_day(), n)
+    word = plural(n, "заморозку", "заморозки", "заморозок")
+    try:
+        await m.bot.send_message(int(uid), f"🎁 Тебе подарили {n} {word}! Они уже ждут в трекере ❄️", reply_markup=open_kb())
+    except TelegramAPIError:
+        pass
+    await m.answer(f"🎁 Готово: {n} {word} для {who}")
 
 
 @router.message()
 async def any_message(m: Message) -> None:
+    uid = m.from_user.id if m.from_user else 0
+    text = (m.text or m.caption or "").strip()
+    if uid in DB.reply_to and await is_admin(m):
+        if not text:
+            await m.answer("Пришли ответ текстом.")
+            return
+        target = DB.reply_to.pop(uid)
+        try:
+            await m.bot.send_message(target, f"💬 Ответ автора бота:\n\n{text}")
+            await m.answer("Отправлено ✅")
+        except TelegramAPIError:
+            await m.answer("Не получилось отправить — возможно, пользователь заблокировал бота.")
+        return
+    if uid in DB.awaiting_fb:
+        if not text:
+            await m.answer("Пришли, пожалуйста, текстом 🙏")
+            return
+        await deliver_feedback(m, text)
+        return
     await m.answer("Открой трекер кнопкой ниже 👇", reply_markup=open_kb())
 
 
@@ -623,7 +1118,7 @@ async def api_sync(request: web.Request) -> web.Response:
         "week": week,
     }
     await DB.save_profile(init.user.id, tz, json.dumps(data, ensure_ascii=False))
-    await DB.touch_user(init.user.id, opened=True)
+    await DB.touch_user(init.user.id, opened=True, username=init.user.username or None, name=display_name(init.user))
     xp = week_xp(body.get("xp"))
     if xp is not None:
         await DB.league_update(init.user.id, display_name(init.user), xp)
@@ -668,6 +1163,8 @@ async def api_league(request: web.Request) -> web.Response:
     me = DB.league.get(uid) if DB.week == week else None
     if me is None:
         me = await DB.league_update(uid, display_name(init.user), 0)
+    if me is None:  # владелец исключил из лиги
+        return web.json_response({"ok": True, "banned": True, "end": end, "leagues": LEAGUES})
     group = DB.standings(me["tier"], me["grp"])
     n = len(group)
     rows, place = [], 0
@@ -683,6 +1180,99 @@ async def api_league(request: web.Request) -> web.Response:
         "demoteFrom": (n - DEMOTE) if tier > 1 and n >= DEMOTE_MIN_GROUP else None,
         "rows": rows,
     })
+
+
+async def api_whoami(request: web.Request) -> web.Response:
+    """При открытии приложения: владелец ли это, подарки, плашка «Что нового»."""
+    init = await auth(request)
+    if init is None:
+        return web.json_response({"ok": False, "error": "bad initData"}, status=401)
+    uid = init.user.id
+    gifts = [{"day": r["day"], "n": int(r["n"])} for r in await DB.fetch(
+        "SELECT day, n FROM gifts WHERE user_id = $1 ORDER BY created", uid)]
+    return web.json_response({"ok": True, "admin": await DB.admin_id() == uid, "gifts": gifts,
+                              "news": DB.news, "bot": BOT_USERNAME})
+
+
+async def api_admin(request: web.Request) -> web.Response:
+    init = await auth(request)
+    if init is None or await DB.admin_id() != init.user.id:
+        return web.json_response({"ok": False, "error": "forbidden"}, status=403)
+    return web.json_response({
+        "ok": True, "stats": await collect_stats(), "series": await series(30), "retention": await retention(),
+        "sources": await sources(), "habits": popular_habits(), "league": league_summary(), "limits": await limits(),
+        "storage": DB.kind, "bot": BOT_USERNAME, "reportHour": REPORT_HOUR,
+    })
+
+
+# ---------- оповещения владельцу об ошибках ----------
+class OwnerAlerts(logging.Handler):
+    """Пересылает владельцу ошибки бота. Сетевые сбои Telegram пропускает, одинаковые — не чаще раза в 10 минут."""
+    SKIP = ("TelegramNetworkError", "TelegramConflictError", "TelegramRetryAfter", "ServerDisconnected",
+            "ClientConnector", "ClientOSError", "Failed to fetch updates")
+
+    def __init__(self, bot: Bot, loop: asyncio.AbstractEventLoop):
+        super().__init__(logging.ERROR)
+        self.bot, self.loop = bot, loop
+        self.seen: dict[str, float] = {}
+        self.recent: list[float] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            msg = record.getMessage()
+            exc = "".join(traceback.format_exception(*record.exc_info)) if record.exc_info else ""
+            if any(x in msg or x in exc for x in self.SKIP):
+                return
+            now, key = time.time(), f"{record.name}:{msg[:80]}"
+            self.recent = [t for t in self.recent if now - t < 3600]
+            if now - self.seen.get(key, 0) < 600 or len(self.recent) >= 20:
+                return
+            self.seen[key] = now
+            self.recent.append(now)
+            text = f"⚠️ Ошибка в боте\n{record.name}: {msg[:500]}" + (f"\n\n{exc[-1500:]}" if exc else "")
+            self.loop.call_soon_threadsafe(lambda: asyncio.ensure_future(self._send(text)))
+        except Exception:
+            pass
+
+    async def _send(self, text: str) -> None:
+        try:
+            admin = await DB.admin_id()
+            if admin:
+                await self.bot.send_message(admin, text[:4000])
+        except Exception:
+            pass
+
+
+async def maybe_report(bot: Bot) -> None:
+    """Раз в день в REPORT_HOUR по МСК присылает владельцу отчёт."""
+    today = msk_day()
+    if DB.report_day == today or (datetime.now(timezone.utc) + LEAGUE_TZ).hour < REPORT_HOUR:
+        return
+    admin = await DB.admin_id()
+    DB.report_day = today
+    await DB.set_meta("report_day", today)
+    if admin:
+        try:
+            await bot.send_message(admin, await report_text())
+        except TelegramAPIError as e:
+            log.warning("report failed: %s", e)
+
+
+async def set_admin_commands(bot: Bot, admin: int) -> None:
+    try:
+        await bot.set_my_commands([
+            BotCommand(command="start", description="Открыть трекер"),
+            BotCommand(command="admin", description="👑 Команды владельца"),
+            BotCommand(command="stats", description="Статистика"),
+            BotCommand(command="report", description="Отчёт сейчас"),
+            BotCommand(command="broadcast", description="Рассылка всем"),
+            BotCommand(command="news", description="Плашка «Что нового»"),
+            BotCommand(command="league", description="Группы лиги"),
+            BotCommand(command="gift", description="Подарить заморозки"),
+            BotCommand(command="feedback", description="Написать автору"),
+        ], scope=BotCommandScopeChat(chat_id=admin))
+    except Exception as e:  # меню команд — не критично
+        log.warning("admin commands: %s", e)
 
 
 # ---------- напоминания ----------
@@ -726,7 +1316,9 @@ async def send(bot: Bot, user_id: int, text: str) -> None:
     try:
         await bot.send_message(user_id, text, reply_markup=open_kb())
         log.info("reminder sent to %s: %s", user_id, text.splitlines()[0])
-    except TelegramAPIError as e:  # пользователь заблокировал бота и т.п.
+    except TelegramForbiddenError:  # пользователь заблокировал бота
+        await DB.set_blocked(user_id)
+    except TelegramAPIError as e:
         log.warning("reminder to %s failed: %s", user_id, e)
 
 
@@ -756,6 +1348,7 @@ async def reminder_loop(bot: Bot) -> None:
             if DB.league_checked != league_week()[0]:  # раз в неделю (и при старте)
                 await league_tick(bot)
             await check_reminders(bot)
+            await maybe_report(bot)
             ticks += 1
             if ticks % 120 == 0:  # раз в час чистим память, раз в сутки — базу
                 await DB.prune_sent(db=ticks % 2880 == 0)
@@ -773,8 +1366,10 @@ def build_app() -> web.Application:
     app.router.add_get("/api/me", api_me)
     app.router.add_post("/api/sync", api_sync)
     app.router.add_post("/api/league", api_league)
-    app.router.add_route("OPTIONS", "/api/sync", options)
-    app.router.add_route("OPTIONS", "/api/league", options)
+    app.router.add_post("/api/whoami", api_whoami)
+    app.router.add_post("/api/admin", api_admin)
+    for path in ("/api/sync", "/api/league", "/api/whoami", "/api/admin"):
+        app.router.add_route("OPTIONS", path, options)
     return app
 
 
@@ -797,10 +1392,15 @@ async def main() -> None:
         BOT_USERNAME = (await bot.get_me()).username or ""
     except TelegramAPIError:
         BOT_USERNAME = ""
+    logging.getLogger().addHandler(OwnerAlerts(bot, asyncio.get_running_loop()))
     await bot.set_my_commands([
         BotCommand(command="start", description="Открыть трекер"),
         BotCommand(command="help", description="Как пользоваться"),
-    ])
+        BotCommand(command="feedback", description="Написать автору"),
+    ], scope=BotCommandScopeDefault())
+    admin = await DB.admin_id()
+    if admin:
+        await set_admin_commands(bot, admin)
     await bot.set_chat_menu_button(menu_button=MenuButtonWebApp(text="Трекер", web_app=WebAppInfo(url=WEBAPP_URL)))
 
     reminders = asyncio.create_task(reminder_loop(bot))
