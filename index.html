@@ -483,7 +483,10 @@ input{font:inherit;color:var(--text)}
 /* тема «Полночь» */
 body.midnight{--grad:linear-gradient(135deg,#2563eb 0%,#0ea5e9 55%,#22d3ee 100%);--purple:#7cc4ff}
 body.midnight .hero,body.midnight .scard{box-shadow:0 22px 44px -22px rgba(14,165,233,.75)}
-@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+@media (prefers-reduced-motion:reduce){
+  .view.enter.push,.view.enter .st{animation-name:fadeIn}
+  .lvup .conf,.cele-parts{display:none}
+}
 </style>
 </head>
 <body>
@@ -809,7 +812,6 @@ function overlay(inner, onClick) {
 }
 const ask = (msg, okText = 'Удалить') => new Promise(res => overlay(`<p>${esc(msg)}</p><div class="row2"><button class="btn dark" data-r="0">Отмена</button><button class="btn red" data-r="1">${esc(okText)}</button></div>`, r => res(r === '1')));
 function celebrate(n, earned) {
-  if (REDUCE) { toast(`🔥 Огонёк горит! ${dni(n)} подряд`); return; }
   const cols = ['#ffb04a', '#f0507e', '#8b4dff', '#ffe27a', '#ffffff'];
   let parts = '';
   for (let i = 0; i < 30; i++) {
@@ -1282,7 +1284,7 @@ function animate(entering) {
   };
   document.querySelectorAll('[data-a]').forEach(el => {
     const k = el.dataset.k, to = +el.dataset.v, type = el.dataset.a;
-    const from = REDUCE ? to : entering ? 0 : (k in A ? A[k] : to);
+    const from = entering ? 0 : (k in A ? A[k] : to);
     A[k] = to;
     apply(el, type, from, false);
     if (from === to) return;
@@ -1291,7 +1293,7 @@ function animate(entering) {
   });
   document.querySelectorAll('[data-c]').forEach(el => {
     const k = 'c_' + el.dataset.k, to = +el.dataset.c, suf = el.dataset.suf || '';
-    const from = REDUCE ? to : entering ? 0 : (k in A ? A[k] : to);
+    const from = entering ? 0 : (k in A ? A[k] : to);
     A[k] = to;
     if (from === to) { el.textContent = fmt(to) + suf; return; }
     const t0 = performance.now(), dur = 800;
