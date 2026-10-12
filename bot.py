@@ -13,7 +13,9 @@
       - по привычкам (в заданное время или каждые N часов), если привычка ещё не отмечена
       - «План на день» — утром список сегодняшних привычек
       - «Спасти серию» — вечером, если день ещё не закрыт
-      - «Итоги недели» — в воскресенье
+      - «Итоги недели» — в воскресенье: закрытые дни, XP, место в лиге, лучшая привычка
+  * кнопки «✅ Сделал» и «+1» прямо в напоминаниях: отметка попадает в приложение при следующем открытии
+  * резервная копия: приложение присылает файл в чат, а если переслать его боту — предложит восстановить
 
 Запуск:
   BOT_TOKEN=123:ABC WEBAPP_URL=https://твой-домен/ [DATABASE_URL=postgresql://...] python bot.py
@@ -40,6 +42,7 @@ from aiogram.types import (
     BotCommand,
     BotCommandScopeChat,
     BotCommandScopeDefault,
+    BufferedInputFile,
     CallbackQuery,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
@@ -92,10 +95,13 @@ SOURCE_RE = re.compile(r"^[A-Za-z0-9_-]{1,32}$")
 DEFAULT_CFG = {
     "plan": {"on": True, "time": "09:00"},
     "save": {"on": True, "time": "23:00"},
-    "week": {"on": False, "time": "20:00"},
+    "week": {"on": True, "time": "20:00"},
 }
 
 BOT_USERNAME = ""
+BOT = None  # экземпляр Bot: нужен HTTP-обработчикам (отправка резервной копии)
+BACKUP_KEY_RE = re.compile(r"^(h_[A-Za-z0-9_-]{1,32}|l_[A-Za-z0-9_-]{1,32}_\d{6}|cfg|meta|td)$")
+BACKUP_MAX = 2 * 1024 * 1024
 
 SCHEMA = [
     """CREATE TABLE IF NOT EXISTS profiles(
@@ -130,6 +136,17 @@ SCHEMA = [
         day     TEXT   NOT NULL,
         user_id BIGINT NOT NULL,
         PRIMARY KEY(day, user_id))""",
+    """CREATE TABLE IF NOT EXISTS marks(
+        user_id BIGINT  NOT NULL,
+        created BIGINT  NOT NULL,
+        habit   TEXT    NOT NULL,
+        day     TEXT    NOT NULL,
+        v       INTEGER NOT NULL,
+        PRIMARY KEY(user_id, created))""",
+    """CREATE TABLE IF NOT EXISTS restores(
+        user_id BIGINT PRIMARY KEY,
+        created BIGINT NOT NULL,
+        data    TEXT   NOT NULL)""",
     """CREATE TABLE IF NOT EXISTS gifts(
         user_id BIGINT  NOT NULL,
         created BIGINT  NOT NULL,
@@ -282,6 +299,17 @@ class Store:
         self.sent = {k for k in self.sent if k[2] >= cutoff}
         if db:
             await self.execute("DELETE FROM sent WHERE day < $1", cutoff)
+            await self.execute("DELETE FROM marks WHERE created < $1", int((time.time() - 14 * 86400) * 1000))
+
+    async def add_mark(self, user_id: int, habit: str, day: str, v: int) -> int:
+        """Отметка из чата (кнопка в напоминании). Приложение заберёт её при открытии."""
+        created = int(time.time() * 1000)
+        for _ in range(10):
+            if await self.execute("INSERT INTO marks(user_id, created, habit, day, v) VALUES($1, $2, $3, $4, $5) "
+                                  "ON CONFLICT DO NOTHING", user_id, created, habit, day, v):
+                return created
+            created += 1
+        return created
 
     # --- лига ---
     async def set_player(self, user_id: int, name: str) -> dict:
@@ -613,9 +641,11 @@ def days_word(n: int) -> str:
     return f"{n} {plural(n, 'день', 'дня', 'дней')}"
 
 
-def habit_text(h: dict) -> str:
-    goal = f"\nЦель: {h['target']} {h['unit']}".rstrip() if h["type"] == "count" else ""
-    return f"⏰ Пора: {h['name']}{goal}\nОтметь в трекере, когда сделаешь."
+def habit_text(h: dict, v: int = 0) -> str:
+    if h["type"] == "count":
+        now = f"\nСейчас: {v} из {h['target']} {h['unit']}".rstrip() if v else f"\nЦель: {h['target']} {h['unit']}".rstrip()
+        return f"⏰ Пора: {h['name']}{now}\nОтмечай кнопками ниже — сразу засчитается в трекере."
+    return f"⏰ Пора: {h['name']}\nСделал? Нажми кнопку — отметка сразу попадёт в трекер."
 
 
 def plan_text(habits: list[dict], streak) -> str:
@@ -638,14 +668,49 @@ def save_text(left: int, streak) -> str:
     return f"🔥 Осталось {left} {word} на сегодня.\nЗакрой день — и огонёк загорится."
 
 
-def week_text(week: dict | None, streak) -> str:
-    parts = ["📊 Итоги недели"]
+def league_line(user_id: int) -> str | None:
+    """Место в лиге на текущей неделе — для итогов недели."""
+    if not user_id or DB.week != league_week()[0] or user_id not in DB.league:
+        return None
+    me = DB.league[user_id]
+    group = DB.standings(me["tier"], me["grp"])
+    place = next((i for i, (u, _) in enumerate(group, 1) if u == user_id), 0)
+    n, tier = len(group), me["tier"]
+    line = f"🏆 Лига «{LEAGUES[tier - 1]}»: {place} место из {n}"
+    if tier < len(LEAGUES) and place <= PROMOTE and me["xp"] > 0:
+        line += " — ты в зоне повышения!"
+    elif tier > 1 and n >= DEMOTE_MIN_GROUP and place > n - DEMOTE:
+        line += " — до полуночи ещё можно выбраться из зоны вылета"
+    return line
+
+
+def week_text(data: dict, local: datetime, streak, user_id: int = 0) -> str:
+    monday = (local - timedelta(days=local.isoweekday() - 1)).strftime("%Y-%m-%d")
+    fresh = bool(data.get("today")) and data["today"] >= monday
+    wk = data.get("wk") if isinstance(data.get("wk"), dict) and data["wk"].get("mon") == monday else None
+    parts = ["📊 Итоги недели", ""]
+    if wk and wk.get("days"):
+        parts.append(f"🔥 Закрыто дней: {wk['closed']} из {wk['days']}")
+    week = data.get("week") if fresh else None
     if week and week.get("all"):
         pct = round(week["ok"] / week["all"] * 100)
-        parts.append(f"Выполнено {pct}% — {week['ok']} из {week['all']} отметок.")
+        parts.append(f"✅ Выполнено {pct}% — {week['ok']} из {week['all']} отметок")
+    row = DB.league.get(user_id) if DB.week == league_week()[0] else None
+    xp = row["xp"] if row else (wk or {}).get("xp", 0)
+    if xp:
+        parts.append(f"⭐ +{xp} XP за неделю")
+    lg = league_line(user_id)
+    if lg:
+        parts.append(lg)
+    if wk and wk.get("best"):
+        b = wk["best"]
+        parts.append(f"💪 Лучшая привычка: {b['name']} ({b['ok']} из {b['all']})")
     if streak:
         parts.append(f"🔥 Серия: {days_word(streak)}")
-    parts.append("Новая неделя — новый огонёк. Так держать!")
+    if len(parts) == 2:
+        parts.append("На этой неделе ты не заглядывал в трекер. Новая неделя — отличный повод начать!")
+    else:
+        parts += ["", "Новая неделя — новый огонёк. Так держать!"]
     return "\n".join(parts)
 
 
@@ -713,6 +778,30 @@ async def league_tick(bot) -> None:
 # ---------- клавиатура ----------
 def open_kb(text: str = "Открыть трекер") -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=text, web_app=WebAppInfo(url=WEBAPP_URL))]])
+
+
+def open_btn() -> list[InlineKeyboardButton]:
+    return [InlineKeyboardButton(text="Открыть трекер", web_app=WebAppInfo(url=WEBAPP_URL))]
+
+
+def habit_kb(h: dict, day: str) -> InlineKeyboardMarkup:
+    """Кнопки под напоминанием о привычке. callback: d:<habit>:<день>:<действие>."""
+    pre = f"d:{h['id']}:{day}:"
+    if h["type"] == "count":
+        row = [InlineKeyboardButton(text="+1", callback_data=pre + "+"),
+               InlineKeyboardButton(text=f"✅ Все {h['target']}", callback_data=pre + "a")]
+    else:
+        row = [InlineKeyboardButton(text="✅ Сделал", callback_data=pre + "1")]
+    return InlineKeyboardMarkup(inline_keyboard=[row, open_btn()])
+
+
+def save_kb(habits: list[dict], day: str) -> InlineKeyboardMarkup:
+    """Под «Спасти серию»: по кнопке на каждую незакрытую привычку."""
+    rows = []
+    for h in habits[:6]:
+        label = f"✅ {h['name']}"[:40]
+        rows.append([InlineKeyboardButton(text=label, callback_data=f"d:{h['id']}:{day}:{'a' if h['type'] == 'count' else '1'}")])
+    return InlineKeyboardMarkup(inline_keyboard=rows + [open_btn()])
 
 
 # ---------- команды бота ----------
@@ -1088,6 +1177,106 @@ async def cmd_gift(m: Message, command: CommandObject) -> None:
     await m.answer(f"🎁 Готово: {n} {word} для {name}. Появятся в трекере при следующем открытии.")
 
 
+# --- отметка кнопкой из напоминания ---
+@router.callback_query(F.data.startswith("d:"))
+async def cb_done(c: CallbackQuery) -> None:
+    try:
+        hid, day, op = c.data[2:].rsplit(":", 2)
+    except ValueError:
+        await c.answer()
+        return
+    uid = c.from_user.id
+    prof = DB.profiles.get(uid)
+    if not prof:
+        await c.answer("Открой трекер, чтобы отметить", show_alert=True)
+        return
+    tz, raw = prof
+    try:
+        data = json.loads(raw)
+    except ValueError:
+        data = {}
+    local = datetime.now(timezone.utc) + timedelta(minutes=tz)
+    today = local.strftime("%Y-%m-%d")
+    if day != today:
+        await c.answer("Этот день уже закончился — отмечать можно только в тот же день 🙂", show_alert=True)
+        return
+    h = next((x for x in data.get("habits", []) if x["id"] == hid), None)
+    if h is None or h["type"] == "quit":
+        await c.answer("Этой привычки больше нет в трекере", show_alert=True)
+        return
+    cur = eff_val(data, today, h)
+    if op == "+":
+        v = min(999, cur + 1)
+    elif op == "a":
+        v = max(cur, h["target"])
+    else:
+        v = max(cur, 1)
+    if v != cur:
+        created = await DB.add_mark(uid, hid, today, v)
+        srv = data.get("srv") if (data.get("srv") or {}).get("day") == today else None
+        srv = srv or {"day": today, "vals": {}}
+        srv["vals"][hid] = [v, created]
+        data["srv"] = srv
+        await DB.save_profile(uid, tz, json.dumps(data, ensure_ascii=False))
+    done = is_done(h, v)
+    habits = [x for x in today_habits(data, local) if x["type"] != "quit"]
+    remaining = [x for x in habits if not is_done(x, eff_val(data, today, x))]
+    if h["type"] == "count" and not done:
+        await c.answer(f"{v} из {h['target']}")
+    else:
+        await c.answer("Отмечено ✅" if v != cur else "Уже отмечено ✅")
+    # обновляем само сообщение
+    if not remaining:
+        yesterday = (local - timedelta(days=1)).strftime("%Y-%m-%d")
+        st = known_streak(data, today, yesterday)
+        if st is not None and not (data.get("today") == today and data.get("todayDone")):
+            st += 1
+        tail = f"\n🔥 День закрыт! Серия: {days_word(st)}" if st else "\n🔥 День закрыт — огонёк горит!"
+    else:
+        tail = f"\nОсталось на сегодня: {len(remaining)} {plural(len(remaining), 'привычка', 'привычки', 'привычек')}"
+    kb_rows = c.message.reply_markup.inline_keyboard if c.message and c.message.reply_markup else []
+    multi = len({(b.callback_data or "")[2:].rsplit(":", 2)[0] for row in kb_rows for b in row
+                 if (b.callback_data or "").startswith("d:")}) > 1  # это «Спасти серию» с несколькими привычками
+    try:
+        if multi and remaining:
+            await c.message.edit_text(f"✅ {h['name']} — готово!{tail}", reply_markup=save_kb(remaining, today))
+        elif h["type"] == "count" and not done:
+            await c.message.edit_text(habit_text(h, v), reply_markup=habit_kb(h, today))
+        else:
+            await c.message.edit_text(f"✅ {h['name']} — готово!{tail}", reply_markup=open_kb())
+    except TelegramAPIError:
+        pass
+
+
+# --- резервная копия: пользователь пересылает файл боту ---
+@router.message(F.document)
+async def on_document(m: Message) -> None:
+    doc = m.document
+    if not (doc.file_name or "").lower().endswith(".json") or (doc.file_size or 0) > BACKUP_MAX:
+        return await any_message(m)
+    try:
+        buf = await m.bot.download(doc)
+        backup = json.loads(buf.read().decode("utf-8"))
+        items = backup.get("items") if isinstance(backup, dict) and backup.get("app") == "habit-tracker" else None
+        if not isinstance(items, dict):
+            raise ValueError("not a backup")
+        items = {k: v for k, v in items.items() if isinstance(k, str) and BACKUP_KEY_RE.match(k) and isinstance(v, str)}
+        if not any(k.startswith("h_") for k in items):
+            raise ValueError("empty")
+    except Exception:
+        await m.answer("Это не похоже на резервную копию трекера 🤔 Пришли файл, который бот присылал раньше.")
+        return
+    created = int(backup.get("created") or 0)
+    payload = json.dumps({"created": created, "items": items}, ensure_ascii=False)
+    await DB.execute("INSERT INTO restores(user_id, created, data) VALUES($1, $2, $3) "
+                     "ON CONFLICT(user_id) DO UPDATE SET created = excluded.created, data = excluded.data",
+                     m.from_user.id, created, payload)
+    n = sum(1 for k in items if k.startswith("h_"))
+    when = datetime.fromtimestamp(created / 1000, timezone.utc).strftime("%d.%m.%Y") if created else "без даты"
+    await m.answer(f"💾 Нашёл копию от {when}: {n} {plural(n, 'привычка', 'привычки', 'привычек')}.\n"
+                   "Открой трекер — там подтвердишь восстановление.", reply_markup=open_kb())
+
+
 @router.message()
 async def any_message(m: Message) -> None:
     uid = m.from_user.id if m.from_user else 0
@@ -1170,6 +1359,15 @@ async def api_sync(request: web.Request) -> web.Response:
     except (TypeError, ValueError):
         streak = 0
     done_raw = body.get("done") if isinstance(body.get("done"), list) else []
+    vals = {}
+    if isinstance(body.get("vals"), dict):
+        for k, v in list(body["vals"].items())[:100]:
+            if isinstance(v, int) and v > 0:
+                vals[_str(k, 32)] = min(999, v)
+    try:
+        mk = max(0, int(body.get("mk", 0) or 0))
+    except (TypeError, ValueError):
+        mk = 0
     data = {
         "today": today if DATE_RE.match(today) else None,
         "habits": clean_habits(body.get("habits")),
@@ -1178,13 +1376,41 @@ async def api_sync(request: web.Request) -> web.Response:
         "todayDone": bool(body.get("todayDone")),
         "cfg": clean_cfg(body.get("cfg")),
         "week": week,
+        "vals": vals,
+        "mk": mk,
+        "wk": clean_wk(body.get("wk")),
     }
+    # отметки из чата, которые приложение ещё не забрало, не теряем
+    try:
+        old = json.loads(DB.profiles.get(init.user.id, (0, "{}"))[1])
+    except ValueError:
+        old = {}
+    srv = old.get("srv") or {}
+    keep = {k: v for k, v in (srv.get("vals") or {}).items() if isinstance(v, list) and len(v) == 2 and v[1] > mk}
+    if keep:
+        data["srv"] = {"day": srv.get("day"), "vals": keep}
     await DB.save_profile(init.user.id, tz, json.dumps(data, ensure_ascii=False))
     await DB.touch_user(init.user.id, opened=True, username=init.user.username or None, name=display_name(init.user))
     xp = week_xp(body.get("xp"))
     if xp is not None:
         await DB.league_update(init.user.id, display_name(init.user), xp)
     return web.json_response({"ok": True, "habits": len(data["habits"])})
+
+
+def clean_wk(raw) -> dict | None:
+    """Итоги недели, посчитанные приложением."""
+    if not isinstance(raw, dict) or not DATE_RE.match(str(raw.get("mon", ""))):
+        return None
+    try:
+        out = {"mon": str(raw["mon"]), "closed": max(0, min(7, int(raw.get("closed", 0)))),
+               "days": max(0, min(7, int(raw.get("days", 0)))), "xp": max(0, min(20000, int(raw.get("xp", 0))))}
+        b = raw.get("best")
+        if isinstance(b, dict) and b.get("name"):
+            out["best"] = {"name": _str(b["name"], 64), "ok": max(0, min(99, int(b.get("ok", 0)))),
+                           "all": max(0, min(99, int(b.get("all", 0))))}
+    except (TypeError, ValueError):
+        return None
+    return out
 
 
 def display_name(user) -> str:
@@ -1250,10 +1476,74 @@ async def api_whoami(request: web.Request) -> web.Response:
     if init is None:
         return web.json_response({"ok": False, "error": "bad initData"}, status=401)
     uid = init.user.id
+    try:
+        body = await request.json()
+        mk = max(0, int(body.get("mk", 0) or 0))
+    except Exception:
+        mk = 0
     gifts = [{"day": r["day"], "n": int(r["n"])} for r in await DB.fetch(
         "SELECT day, n FROM gifts WHERE user_id = $1 ORDER BY created", uid)]
+    since = max(mk, int((time.time() - 3 * 86400) * 1000))
+    marks = [{"id": int(r["created"]), "h": r["habit"], "d": r["day"], "v": int(r["v"])} for r in await DB.fetch(
+        "SELECT created, habit, day, v FROM marks WHERE user_id = $1 AND created > $2 ORDER BY created", uid, since)]
+    restore = None
+    row = await DB.fetch("SELECT created, data FROM restores WHERE user_id = $1", uid)
+    if row:
+        try:
+            items = json.loads(row[0]["data"])["items"]
+            restore = {"created": int(row[0]["created"]), "habits": sum(1 for k in items if k.startswith("h_"))}
+        except (ValueError, KeyError):
+            restore = None
     return web.json_response({"ok": True, "admin": await DB.admin_id() == uid, "gifts": gifts,
-                              "news": DB.news, "bot": BOT_USERNAME})
+                              "news": DB.news, "bot": BOT_USERNAME, "marks": marks, "restore": restore})
+
+
+async def api_backup(request: web.Request) -> web.Response:
+    """Приложение присылает все свои данные — бот отправляет их файлом в чат."""
+    if request.content_length and request.content_length > BACKUP_MAX:
+        return web.json_response({"ok": False, "error": "too big"}, status=413)
+    init = await auth(request)
+    if init is None:
+        return web.json_response({"ok": False, "error": "bad initData"}, status=401)
+    body = await request.json()
+    raw = body.get("items") if isinstance(body.get("items"), dict) else {}
+    items = {k: v for k, v in raw.items() if isinstance(k, str) and BACKUP_KEY_RE.match(k) and isinstance(v, str) and len(v) <= 8192}
+    habits = sum(1 for k in items if k.startswith("h_"))
+    if not habits:
+        return web.json_response({"ok": False, "error": "empty"}, status=400)
+    now = int(time.time() * 1000)
+    data = json.dumps({"app": "habit-tracker", "v": 1, "created": now, "user": init.user.id, "items": items},
+                      ensure_ascii=False).encode("utf-8")
+    local = datetime.now(timezone.utc) + timedelta(minutes=DB.profiles.get(init.user.id, (180, ""))[0])
+    name = f"habits-backup-{local.strftime('%Y-%m-%d')}.json"
+    months = sorted(k[-6:] for k in items if k.startswith("l_"))
+    since = f", отметки с {months[0][4:]}.{months[0][:4]}" if months else ""
+    if BOT is None:
+        return web.json_response({"ok": False, "error": "bot offline"}, status=503)
+    try:
+        await BOT.send_document(init.user.id, BufferedInputFile(data, filename=name), caption=(
+            f"💾 Резервная копия трекера: {habits} {plural(habits, 'привычка', 'привычки', 'привычек')}{since}.\n\n"
+            "Чтобы восстановить — просто перешли этот файл мне в чат."))
+    except TelegramAPIError as e:
+        log.warning("backup send failed: %s", e)
+        return web.json_response({"ok": False, "error": "send failed"}, status=502)
+    return web.json_response({"ok": True, "habits": habits})
+
+
+async def api_restore(request: web.Request) -> web.Response:
+    """get — отдать копию, которую пользователь переслал боту; drop — забыть её."""
+    init = await auth(request)
+    if init is None:
+        return web.json_response({"ok": False, "error": "bad initData"}, status=401)
+    body = await request.json()
+    uid = init.user.id
+    if body.get("action") == "drop":
+        await DB.execute("DELETE FROM restores WHERE user_id = $1", uid)
+        return web.json_response({"ok": True})
+    row = await DB.fetch("SELECT created, data FROM restores WHERE user_id = $1", uid)
+    if not row:
+        return web.json_response({"ok": False, "error": "none"}, status=404)
+    return web.json_response({"ok": True, "created": int(row[0]["created"]), "items": json.loads(row[0]["data"])["items"]})
 
 
 async def api_admin(request: web.Request) -> web.Response:
@@ -1347,36 +1637,60 @@ def known_streak(data: dict, day: str, yesterday: str):
     return None
 
 
-def due_items(data: dict, local: datetime) -> list[tuple[str, str, str]]:
-    """Все напоминания пользователя на сегодня: (ключ, время, текст)."""
+def eff_val(data: dict, day: str, h: dict) -> int:
+    """Значение привычки за день по данным сервера: что прислало приложение + отметки кнопками из чата."""
+    v = 0
+    if data.get("today") == day:
+        try:
+            v = int((data.get("vals") or {}).get(h["id"], 0) or 0)
+        except (TypeError, ValueError):
+            v = 0
+        if h["id"] in set(data.get("done", [])):
+            v = max(v, h["target"] if h["type"] == "count" else 1)
+    srv = data.get("srv") or {}
+    if srv.get("day") == day and h["id"] in (srv.get("vals") or {}):
+        v = max(v, int(srv["vals"][h["id"]][0]))
+    return v
+
+
+def is_done(h: dict, v: int) -> bool:
+    return v >= (h["target"] if h["type"] == "count" else 1)
+
+
+def today_habits(data: dict, local: datetime) -> list[dict]:
+    day, weekday = local.strftime("%Y-%m-%d"), local.isoweekday()
+    return [h for h in data.get("habits", []) if h["created"] <= day and weekday in h["days"]]
+
+
+def due_items(data: dict, local: datetime, user_id: int = 0) -> list[tuple]:
+    """Все напоминания пользователя на сегодня: (ключ, время, текст, клавиатура)."""
     day = local.strftime("%Y-%m-%d")
     yesterday = (local - timedelta(days=1)).strftime("%Y-%m-%d")
     weekday = local.isoweekday()
-    done = set(data.get("done", [])) if data.get("today") == day else set()
-    habits = [h for h in data.get("habits", []) if h["created"] <= day and weekday in h["days"]]
-    remaining = [h for h in habits if h["type"] != "quit" and h["id"] not in done]
+    habits = today_habits(data, local)
+    remaining = [h for h in habits if h["type"] != "quit" and not is_done(h, eff_val(data, day, h))]
+    left = {h["id"] for h in remaining}
     streak = known_streak(data, day, yesterday)
     cfg = data.get("cfg") or DEFAULT_CFG
     items = []
     for h in habits:
-        if h["type"] != "quit" and h["id"] in done:
+        if h["type"] != "quit" and h["id"] not in left:
             continue
+        kb = habit_kb(h, day) if h["type"] != "quit" else open_kb()
         for t in h["times"]:
-            items.append((f"h:{h['id']}:{t}", t, habit_text(h)))
+            items.append((f"h:{h['id']}:{t}", t, habit_text(h, eff_val(data, day, h)), kb))
     if cfg["plan"]["on"] and habits:
-        items.append(("plan", cfg["plan"]["time"], plan_text(habits, streak)))
+        items.append(("plan", cfg["plan"]["time"], plan_text(habits, streak), open_kb()))
     if cfg["save"]["on"] and remaining:
-        items.append(("save", cfg["save"]["time"], save_text(len(remaining), streak)))
+        items.append(("save", cfg["save"]["time"], save_text(len(remaining), streak), save_kb(remaining, day)))
     if cfg["week"]["on"] and weekday == 7:
-        monday = (local - timedelta(days=6)).strftime("%Y-%m-%d")
-        fresh = data.get("today") and data["today"] >= monday
-        items.append(("week", cfg["week"]["time"], week_text(data.get("week") if fresh else None, streak)))
+        items.append(("week", cfg["week"]["time"], week_text(data, local, streak, user_id), open_kb()))
     return items
 
 
-async def send(bot: Bot, user_id: int, text: str) -> None:
+async def send(bot: Bot, user_id: int, text: str, kb: InlineKeyboardMarkup | None = None) -> None:
     try:
-        await bot.send_message(user_id, text, reply_markup=open_kb())
+        await bot.send_message(user_id, text, reply_markup=kb or open_kb())
         log.info("reminder sent to %s: %s", user_id, text.splitlines()[0])
     except TelegramForbiddenError:  # пользователь заблокировал бота
         await DB.set_blocked(user_id)
@@ -1395,12 +1709,12 @@ async def check_reminders(bot: Bot, now: datetime | None = None) -> None:
             data = json.loads(raw)
         except ValueError:
             continue
-        for item, t, text in due_items(data, local):
+        for item, t, text, kb in due_items(data, local, user_id):
             h, m = map(int, t.split(":"))
             if not (start_min <= h * 60 + m <= now_min):
                 continue
             if await DB.mark_sent(user_id, item, day):  # ещё не отправляли сегодня
-                await send(bot, user_id, text)
+                await send(bot, user_id, text, kb)
 
 
 async def reminder_loop(bot: Bot) -> None:
@@ -1421,7 +1735,7 @@ async def reminder_loop(bot: Bot) -> None:
 
 # ---------- запуск ----------
 def build_app() -> web.Application:
-    app = web.Application(middlewares=[cors])
+    app = web.Application(middlewares=[cors], client_max_size=BACKUP_MAX + 65536)
     app.router.add_get("/", index)
     app.router.add_get("/index.html", index)
     app.router.add_get("/health", health)
@@ -1430,17 +1744,19 @@ def build_app() -> web.Application:
     app.router.add_post("/api/league", api_league)
     app.router.add_post("/api/whoami", api_whoami)
     app.router.add_post("/api/admin", api_admin)
-    for path in ("/api/sync", "/api/league", "/api/whoami", "/api/admin"):
+    app.router.add_post("/api/backup", api_backup)
+    app.router.add_post("/api/restore", api_restore)
+    for path in ("/api/sync", "/api/league", "/api/whoami", "/api/admin", "/api/backup", "/api/restore"):
         app.router.add_route("OPTIONS", path, options)
     return app
 
 
 async def main() -> None:
-    global BOT_USERNAME
+    global BOT_USERNAME, BOT
     if not BOT_TOKEN or not WEBAPP_URL.startswith("https://"):
         raise SystemExit("Задай переменные окружения BOT_TOKEN и WEBAPP_URL (адрес должен начинаться с https://)")
     await DB.open()
-    bot = Bot(BOT_TOKEN)
+    bot = BOT = Bot(BOT_TOKEN)
     dp = Dispatcher()
     dp.message.outer_middleware(TrackUsers())
     dp.include_router(router)

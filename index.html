@@ -373,6 +373,7 @@ input{font:inherit;color:var(--text)}
 .upd span.t{flex:1;min-width:0}
 .upd small{display:block;color:var(--hint);font-weight:600;font-size:12px;margin-top:1px}
 .upd .ic{color:var(--hint);flex:none}
+.bkic{width:34px;height:34px;border-radius:11px;display:grid;place-items:center;background:rgba(47,212,180,.14);color:#2fd4b4;flex:none}
 .wn h3{font-family:var(--disp);font-size:20px;margin:8px 8px 2px}
 .wn .ver{color:var(--hint);font-weight:600;font-size:13px;margin:0 8px 10px}
 .wn ul{list-style:none;margin:0 0 12px;padding:0}
@@ -599,6 +600,8 @@ const ICONS = {
   clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
   crown: '<path d="M11.56 3.27a.5.5 0 0 1 .88 0l2.95 5.6a1 1 0 0 0 1.52.29l4.27-3.66a.5.5 0 0 1 .82.5L19.18 16a1 1 0 0 1-.96.74H5.78a1 1 0 0 1-.96-.74L2.02 6a.5.5 0 0 1 .82-.5l4.27 3.66a1 1 0 0 0 1.52-.29z"/><path d="M5 21h14"/>',
   chat: '<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/>',
+  download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/>',
+  check: '<path d="M20 6 9 17l-5-5"/>',
   users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
   link: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
   arrowup: '<path d="M12 19V5M5 12l7-7 7 7"/>', arrowdown: '<path d="M12 5v14M19 12l-7 7-7-7"/>',
@@ -627,7 +630,7 @@ function ring(size, sw, p, k, stroke = 'url(#gR)', track = 'rgba(255,255,255,.08
 }
 
 /* ---------- XP, уровни, лига ---------- */
-const UPD_VER = '2.0';
+const UPD_VER = '2.2';
 const XP_HABIT = 10, XP_DAY = 20, XP_MULT = 1.5, XP_MULT_FROM = 7;
 const LEVEL_AT = [0, 50, 150, 300, 500, 750, 1000, 1500, 2000, 2750, 3500, 4500];
 const levelStart = l => l <= LEVEL_AT.length ? LEVEL_AT[l - 1] : LEVEL_AT[LEVEL_AT.length - 1] + (l - LEVEL_AT.length) * 1000;
@@ -646,12 +649,12 @@ const LEAGUE_COLORS = [['#ffd56a', '#f2a93b'], ['#ff9a5a', '#e5603a'], ['#9b5cff
 const fmt = n => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
 
 /* ---------- состояние ---------- */
-const DEF_CFG = { plan: { on: true, time: '09:00' }, save: { on: true, time: '23:00' }, week: { on: false, time: '20:00' } };
+const DEF_CFG = { plan: { on: true, time: '09:00' }, save: { on: true, time: '23:00' }, week: { on: true, time: '20:00' } };
 const S = {
   habits: [], log: {}, cfg: JSON.parse(JSON.stringify(DEF_CFG)), cfgDraft: null,
   tab: 'today', view: 'main', sel: todayKey(), detailId: null, form: null, formBack: 'main', calOff: 0, statP: 'month',
   lastToday: todayKey(), lastView: null, sim: null, pulse: null,
-  td: { d: '', t: {} }, meta: { lvl: 0, upd: '', theme: '', gifts: [] }, league: null, leagueErr: false, leagueLoading: false,
+  td: { d: '', t: {} }, meta: { lvl: 0, upd: '', theme: '', gifts: [], mk: 0 }, league: null, leagueErr: false, leagueLoading: false,
   isAdmin: false, news: null, bot: '', admin: null, adminErr: false,
 };
 const A = {}; // прошлые значения для анимаций
@@ -740,10 +743,18 @@ async function syncNow() {
   const habits = S.habits.map(h => ({ id: h.id, name: h.name, type: h.type, target: h.target || 1, unit: h.unit || '', created: h.created,
     days: h.type === 'quit' ? [1, 2, 3, 4, 5, 6, 7] : h.days, times: remindTimes(h) }));
   const done = S.habits.filter(h => h.type !== 'quit' && success(h, t)).map(h => h.id);
+  const vals = {}; for (const h of S.habits) { const v = val(h, t); if (v > 0) vals[h.id] = v; }
+  let closed = 0, days = 0, best = null;
+  for (let d = mon; d <= t; d = addDays(d, 1)) { const st = sim.status[d]; if (!st || st === 'none') continue; days++; if (st === 'done') closed++; }
+  for (const h of S.habits) {
+    const [o, a] = habitRange(h, mon, t);
+    if (o && (!best || o / a > best.ok / best.all || (o / a === best.ok / best.all && o > best.ok))) best = { name: h.name, ok: o, all: a };
+  }
   try {
     await fetch(API_BASE + '/api/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ initData: tg.initData, tz: -new Date().getTimezoneOffset(), today: t, habits, done,
-        streak: sim.streak, todayDone: sim.todayDone, cfg: S.cfg, week: { ok, all },
+        streak: sim.streak, todayDone: sim.todayDone, cfg: S.cfg, week: { ok, all }, vals, mk: S.meta.mk || 0,
+        wk: { mon, closed, days, xp: weekXp(sim), best },
         xp: { days: Object.fromEntries(Array.from({ length: 8 }, (_, i) => addDays(t, -i)).map(d => [d, sim.dayXp[d] || 0])), total: sim.xp, level: sim.level } }) });
   } catch (e) { /* бот недоступен — данные всё равно сохранены */ }
 }
@@ -1169,7 +1180,7 @@ function levelUp(l, preview) {
   });
 }
 const newsVer = () => S.news && S.news.ver ? 'n' + S.news.ver : UPD_VER;
-const newsTitle = () => S.news && S.news.title ? S.news.title : `Обновление ${UPD_VER}: лига, уровни и XP`;
+const newsTitle = () => S.news && S.news.title ? S.news.title : `Обновление ${UPD_VER}: отметки из чата и итоги недели`;
 function feedbackLink() {
   if (!S.bot) { toast('Напиши боту команду /feedback'); return; }
   const u = `https://t.me/${S.bot}?start=feedback`;
@@ -1184,11 +1195,10 @@ function whatsNew() {
     return;
   }
   const items = [
-    ['trophy', 'Лига', 'Соревнуйся с другими по XP за неделю. Топ-5 группы переходят в лигу выше.'],
-    ['star', 'Уровни и XP', '+10 XP за привычку, +20 за закрытый день, ×1,5 при серии от 7 дней.'],
-    ['gift', 'Награды за уровни', 'Слоты заморозок, титулы и тема оформления «Полночь».'],
-    ['lock', 'Честная серия', 'Отмечать привычки можно только в тот же день. Прошлые дни — только просмотр.'],
-    ['snow', 'Заморозки по уровням', 'Сначала 1 слот, с 5 уровня — 2, с 8 уровня — 3.'],
+    ['check', 'Отметки прямо из чата', 'В напоминаниях появились кнопки «✅ Сделал» и «+1» — привычка засчитается без открытия трекера.'],
+    ['chart', 'Итоги недели', 'В воскресенье вечером бот пришлёт, сколько дней закрыто, сколько XP набрано, место в лиге и лучшую привычку.'],
+    ['download', 'Резервная копия', 'В напоминаниях → «Отправить копию в чат». Чтобы восстановить, перешли файл боту.'],
+    ['trophy', 'Лига, уровни и XP', 'Соревнуйся по XP за неделю и получай награды за уровни. Отмечать можно только в тот же день.'],
   ];
   overlay(`<div class="wn"><h3>Что нового</h3><div class="ver">Версия ${UPD_VER}</div><ul>${items.map(([i, b, t]) => `<li><span class="wi">${ic(i, 20, 2.2)}</span><div><b>${b}</b><span>${t}</span></div></li>`).join('')}</ul></div>
     <button class="btn" data-r="ok">Понятно</button><button class="btn dark fbbtn" data-r="fb">${ic('chat', 18, 2.2)}Написать автору</button>`,
@@ -1259,11 +1269,78 @@ async function loadAdmin() {
   } catch (e) { S.adminErr = !S.admin; }
   if (S.view === 'admin') { S.lastView = null; render(); }
 }
+const api = (path, extra = {}) => fetch(API_BASE + path, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ initData: tg.initData, ...extra }) }).then(r => r.json());
+// отметки, сделанные кнопками в напоминаниях: бот хранит их, пока приложение не заберёт
+function applyMarks(marks) {
+  const last = S.meta.mk || 0, names = [];
+  let top = last;
+  for (const m of marks || []) {
+    if (m.id <= last) continue;
+    top = Math.max(top, m.id);
+    const h = H(m.h); if (!h) continue;
+    S.log[h.id] = S.log[h.id] || {};
+    if ((S.log[h.id][m.d] || 0) >= m.v) continue;
+    S.log[h.id][m.d] = m.v; markLog(h.id, m.d);
+    if (m.d === todayKey() && success(h, m.d)) {
+      if (S.td.d !== m.d) S.td = { d: m.d, t: {} };
+      const at = new Date(m.id); S.td.t[h.id] = S.td.t[h.id] || `${pad(at.getHours())}:${pad(at.getMinutes())}`; dirty.add('td');
+    }
+    if (!names.includes(h.name)) names.push(h.name);
+  }
+  if (top > last) { S.meta.mk = top; saveMeta(); }
+  if (!names.length) return;
+  toast(`✅ Отмечено из чата: ${names.join(', ')}`);
+  if (S.view === 'main') render();
+  const lv = streakSim().level;
+  if (lv > S.meta.lvl) { S.meta.lvl = lv; saveMeta(); setTimeout(() => levelUp(lv), 700); }
+}
+let restoreAsked = false;
+function offerRestore(r) {
+  if (restoreAsked) return; restoreAsked = true;
+  const when = r.created ? new Date(r.created).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }) : 'без даты';
+  overlay(`<div class="wn"><h3>Восстановить копию?</h3><div class="ver">Копия от ${when} · ${r.habits} ${plural(r.habits, 'привычка', 'привычки', 'привычек')}</div></div>
+    <p>Все привычки и отметки в трекере заменятся данными из копии. Отменить это будет нельзя.</p>
+    <div class="row2"><button class="btn dark" data-r="0">Не надо</button><button class="btn" data-r="1">Восстановить</button></div>`,
+    res => { if (res === '1') doRestore(); else api('/api/restore', { action: 'drop' }).catch(() => {}); });
+}
+async function doRestore() {
+  toast('Восстанавливаю…');
+  try {
+    const j = await api('/api/restore', { action: 'get' }); if (!j.ok) throw new Error('none');
+    const keep = S.meta;
+    await flush();
+    const cur = Object.keys(await store.all());
+    for (let i = 0; i < cur.length; i += 50) await store.remove(cur.slice(i, i + 50));
+    for (const [k, v] of Object.entries(j.items)) await store.set(k, v);
+    S.habits = []; S.log = {}; S.cfg = JSON.parse(JSON.stringify(DEF_CFG)); S.td = { d: '', t: {} };
+    S.meta = { lvl: 0, upd: '', theme: '', gifts: [], mk: 0 };
+    await load();
+    S.meta.gifts = keep.gifts || []; S.meta.mk = Math.max(S.meta.mk || 0, keep.mk || 0); S.meta.upd = keep.upd; S.meta.wk2 = 1;
+    S.meta.lvl = streakSim().level; saveMeta();
+    await api('/api/restore', { action: 'drop' });
+    S.view = 'main'; S.tab = 'today'; S.sel = todayKey(); S.lastView = null; render(); scheduleSync(); hap.ok();
+    toast(`Готово: ${S.habits.length} ${plural(S.habits.length, 'привычка восстановлена', 'привычки восстановлены', 'привычек восстановлено')}`);
+  } catch (e) { toast('Не получилось восстановить — попробуй ещё раз'); restoreAsked = false; }
+}
+async function sendBackup(btn) {
+  if (!inTG) { toast('Резервная копия работает внутри Telegram'); return; }
+  if (!S.habits.length) { toast('Пока нечего сохранять — добавь привычку'); return; }
+  btn.disabled = true; toast('Отправляю копию в чат…');
+  try {
+    await flush();
+    const j = await api('/api/backup', { items: await store.all() });
+    if (!j.ok) throw new Error(j.error);
+    hap.ok(); toast('💾 Копия отправлена в чат с ботом');
+  } catch (e) { toast('Не получилось отправить — попробуй позже'); }
+  btn.disabled = false;
+}
 async function whoami() {
   if (!inTG) return;
   try {
-    const r = await fetch(API_BASE + '/api/whoami', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ initData: tg.initData }) });
-    const j = await r.json(); if (!j.ok) return;
+    const j = await api('/api/whoami', { mk: S.meta.mk || 0 }); if (!j.ok) return;
+    applyMarks(j.marks);
+    if (j.restore) setTimeout(() => offerRestore(j.restore), 500);
     const before = JSON.stringify(S.meta.gifts || []), had = S.isAdmin, hadNews = S.news && S.news.ver;
     S.isAdmin = !!j.admin; S.news = j.news || null; S.bot = j.bot || '';
     const gifts = (j.gifts || []).map(g => ({ day: g.day, n: g.n }));
@@ -1362,16 +1439,20 @@ function viewReminders() {
   const left = S.habits.filter(h => visibleOn(h, t) && h.type !== 'quit' && !success(h, t)).length || 2;
   const msg = sim.streak > 0 ? `Осталось ${left} ${plural(left, 'привычка', 'привычки', 'привычек')}, а серия — ${dni(sim.streak)}. До полуночи ещё есть время.`
     : `Осталось ${left} ${plural(left, 'привычка', 'привычки', 'привычек')}. Закрой день — и огонёк загорится.`;
-  const gen = [['plan', 'План на день', 'Утром — список привычек'], ['save', 'Спасти серию', 'Если день ещё не закрыт'], ['week', 'Итоги недели', 'Воскресенье, вечером']];
+  const gen = [['plan', 'План на день', 'Утром — список привычек'], ['save', 'Спасти серию', 'Вечером, с кнопками отметки'], ['week', 'Итоги недели', 'Воскресенье, XP и лига']];
+  const first = S.habits.find(h => visibleOn(h, t) && h.type !== 'quit' && !success(h, t)) || S.habits.find(h => h.type !== 'quit');
   const rows = gen.map(([k, b, s]) => `<div class="row"><div class="meta" style="flex:1"><b>${b}</b><span>${s}</span></div>${timeSel(c[k].time, `data-cfg="${k}"`)}<button class="sw${c[k].on ? ' on' : ''}" data-act="rsw" data-v="${k}" aria-label="${b}"></button></div>`).join('');
   const hrows = S.habits.length ? S.habits.map(h => `<button class="row" style="width:100%;text-align:left;--c:${h.color}" data-act="redit" data-id="${h.id}"><i class="dot"></i><div class="meta" style="flex:1"><b>${esc(h.name)}</b></div><span class="rv">${remindText(h)}</span><span class="chev">${ic('right', 18, 2.4)}</span></button>`).join('')
     : `<div class="row"><div class="meta"><span>Пока нет привычек</span></div></div>`;
   const body = `<div class="nav"><button class="back" data-act="back">${ic('left', 20, 2.4)}Назад</button><span></span></div>
     <h1 class="h1 st" style="--i:0;font-size:28px;margin:0 0 16px">Напоминания</h1>
     <div class="pv st" style="--i:1"><div class="cap">Так бот напишет в чат</div><div class="pvb"><div class="ava">${flame(20)}</div>
-      <div class="bub"><div class="msg"><b>Огонёк скоро погаснет</b><p>${msg}</p><time>${c.save.time}</time></div><div class="open">Открыть трекер</div></div></div></div>
+      <div class="bub"><div class="msg"><b>Огонёк скоро погаснет</b><p>${msg}</p><time>${c.save.time}</time></div>${first ? `<div class="open">✅ ${esc(first.name)}</div>` : ''}<div class="open">Открыть трекер</div></div></div></div>
     <div class="lbl st" style="--i:2">Общие</div><div class="grp st" style="--i:2">${rows}</div>
-    <div class="lbl st" style="--i:3">По привычкам</div><div class="grp st" style="--i:3">${hrows}</div>`;
+    <div class="lbl st" style="--i:3">По привычкам</div><div class="grp st" style="--i:3">${hrows}</div>
+    <div class="lbl st" style="--i:4">Резервная копия</div><div class="grp st" style="--i:4">
+      <button class="row" style="width:100%;text-align:left;--c:#2fd4b4" data-act="backup"><span class="bkic">${ic('download', 18, 2.2)}</span><div class="meta" style="flex:1"><b>Отправить копию в чат</b><span>Файл со всеми привычками и отметками</span></div><span class="chev">${ic('right', 18, 2.4)}</span></button></div>
+    <div class="small st" style="--i:4;margin:8px 4px 0">Чтобы восстановить данные или перенести их на другой аккаунт, просто перешли этот файл боту — трекер предложит восстановление.</div>`;
   return [body, `<div class="bbar"><button class="btn" data-act="rsave">Сохранить</button></div>`];
 }
 
@@ -1490,6 +1571,7 @@ const actions = {
   fremind: el => swFlip(el, () => { S.form.remindOn = !S.form.remindOn; }),
   fevery: el => { S.form.every = +el.dataset.v; hap.sel(); render(); },
   rsw: el => swFlip(el, () => { const k = el.dataset.v; S.cfgDraft[k].on = !S.cfgDraft[k].on; }),
+  backup: el => sendBackup(el),
   rsave: () => { S.cfg = S.cfgDraft; saveCfg(); hap.ok(); toast('Напоминания сохранены'); goBack(); },
 };
 document.addEventListener('click', e => {
@@ -1581,6 +1663,7 @@ actions.undo = () => undoDelete();
   await load();
   const sim0 = streakSim();
   if (!S.meta.lvl) { S.meta.lvl = sim0.level; saveMeta(); }     // первый запуск после обновления — без салюта
+  if (!S.meta.wk2) { S.meta.wk2 = 1; if (!S.cfg.week.on) { S.cfg.week.on = true; saveCfg(); } saveMeta(); }   // 2.2: итоги недели включены
   render();
   if (sim0.level > S.meta.lvl) { S.meta.lvl = sim0.level; saveMeta(); setTimeout(() => levelUp(sim0.level), 600); }
   whoami();
@@ -1590,6 +1673,7 @@ actions.undo = () => undoDelete();
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) { commitDelete(); flush(); return; }
     if (S.lastToday !== todayKey()) { S.lastToday = todayKey(); S.sel = todayKey(); render(); scheduleSync(); }
+    whoami();
   });
 })();
 </script>
