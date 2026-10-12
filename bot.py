@@ -19,6 +19,7 @@
   BOT_TOKEN=123:ABC WEBAPP_URL=https://твой-домен/ [DATABASE_URL=postgresql://...] python bot.py
 """
 import asyncio
+import html
 import json
 import logging
 import os
@@ -996,34 +997,95 @@ async def cmd_unban(m: Message, command: CommandObject) -> None:
 
 
 # --- подарки ---
+async def refresh_usernames(bot: Bot, limit: int = 100) -> None:
+    """Дотягиваем @username и имя у тех, кого запомнили раньше без них (Telegram отдаёт их через getChat)."""
+    rows = await DB.fetch("SELECT user_id FROM users WHERE (username IS NULL OR name IS NULL) AND blocked = 0 "
+                          "ORDER BY last_seen DESC LIMIT $1", limit)
+    for r in rows:
+        try:
+            ch = await bot.get_chat(int(r["user_id"]))
+        except Exception:
+            continue
+        name = " ".join(x for x in (ch.first_name, ch.last_name) if x) or None
+        await DB.execute("UPDATE users SET username = COALESCE($1, username), name = COALESCE($2, name) WHERE user_id = $3",
+                         ch.username or None, name, int(r["user_id"]))
+
+
+async def find_user(who: str) -> list[int]:
+    """Ищем по ID, @username, ссылке t.me/… или имени. Возвращает подходящих пользователей."""
+    w = who.strip()
+    for pre in ("https://t.me/", "http://t.me/", "t.me/", "@"):
+        if w.lower().startswith(pre):
+            w = w[len(pre):]
+    if not w:
+        return []
+    if w.isdigit():
+        return [int(w)] if await DB.fetchval("SELECT user_id FROM users WHERE user_id = $1", int(w)) else []
+    rows = await DB.fetch("SELECT user_id FROM users WHERE LOWER(username) = $1", w.lower())
+    if rows:
+        return [int(r["user_id"]) for r in rows]
+    ids = {}
+    for r in await DB.fetch("SELECT user_id, name FROM users"):
+        ids[int(r["user_id"])] = (r["name"] or "").lower()
+    for uid, p in DB.players.items():
+        if p.get("name") and uid in ids:
+            ids[uid] = ids[uid] + " " + p["name"].lower()
+    q = w.lower()
+    return [uid for uid, n in ids.items() if n and any(part.startswith(q) for part in n.replace(".", " ").split())]
+
+
+async def users_hint(limit: int = 15) -> str:
+    rows = await DB.fetch("SELECT user_id, username, name FROM users ORDER BY last_seen DESC LIMIT $1", limit)
+    if not rows:
+        return "Пока никого нет."
+    out = []
+    for r in rows:
+        nm = html.escape(r["name"] or "без имени")
+        un = f" @{html.escape(r['username'])}" if r["username"] else ""
+        out.append(f"• {nm}{un} — <code>/gift {r['user_id']} 1</code>")
+    return "\n".join(out)
+
+
 @router.message(Command("gift"))
 async def cmd_gift(m: Message, command: CommandObject) -> None:
     if not await is_admin(m):
         return await any_message(m)
     parts = (command.args or "").split()
     if not parts:
-        await m.answer("Напиши так: /gift @username 2  или  /gift 123456789 1")
+        await m.answer("Кому подарить? Напиши /gift и ID, @username или имя, а потом сколько (1–5).\n"
+                       "Себе: <code>/gift me 2</code>\n\nПоследние пользователи (нажми на команду, чтобы скопировать):\n"
+                       + await users_hint(), parse_mode="HTML")
         return
-    who = parts[0]
-    n = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 1
+    n = 1
+    if len(parts) > 1 and parts[-1].isdigit() and len(parts[-1]) <= 2:
+        n = int(parts.pop())
+    elif len(parts) == 1 and parts[0].isdigit() and len(parts[0]) <= 2:   # «/gift 2» — себе
+        n, parts = int(parts[0]), ["me"]
     n = max(1, min(5, n))
-    if who.startswith("@"):
-        uid = await DB.fetchval("SELECT user_id FROM users WHERE LOWER(username) = $1", who[1:].lower())
+    who = " ".join(parts)
+    if who.lower() in ("me", "я", "мне", "себе"):
+        found = [m.from_user.id]
     else:
-        uid = int(who) if who.isdigit() else None
-        if uid and not await DB.fetchval("SELECT user_id FROM users WHERE user_id = $1", uid):
-            uid = None
-    if not uid:
-        await m.answer("Не нашёл такого пользователя. Он должен хотя бы раз написать боту или открыть трекер.")
+        found = await find_user(who)
+        if not found:
+            await refresh_usernames(m.bot)
+            found = await find_user(who)
+    if len(found) > 1:
+        await m.answer("Нашлось несколько человек, выбери по ID:\n" + "\n".join(f"• <code>/gift {u} {n}</code>" for u in found[:15]), parse_mode="HTML")
         return
+    if not found:
+        await m.answer(f"Не нашёл «{html.escape(who)}». Вот кто есть в боте:\n" + await users_hint(), parse_mode="HTML")
+        return
+    uid = found[0]
     await DB.execute("INSERT INTO gifts(user_id, created, day, n) VALUES($1, $2, $3, $4)",
                      int(uid), int(time.time() * 1000), msk_day(), n)
     word = plural(n, "заморозку", "заморозки", "заморозок")
+    name = await DB.fetchval("SELECT COALESCE(name, username) FROM users WHERE user_id = $1", uid) or str(uid)
     try:
         await m.bot.send_message(int(uid), f"🎁 Тебе подарили {n} {word}! Они уже ждут в трекере ❄️", reply_markup=open_kb())
     except TelegramAPIError:
         pass
-    await m.answer(f"🎁 Готово: {n} {word} для {who}")
+    await m.answer(f"🎁 Готово: {n} {word} для {name}. Появятся в трекере при следующем открытии.")
 
 
 @router.message()
