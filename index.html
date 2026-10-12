@@ -484,6 +484,60 @@ input{font:inherit;color:var(--text)}
 /* тема «Полночь» */
 body.midnight{--grad:linear-gradient(135deg,#2563eb 0%,#0ea5e9 55%,#22d3ee 100%);--purple:#7cc4ff}
 body.midnight .hero,body.midnight .scard{box-shadow:0 22px 44px -22px rgba(14,165,233,.75)}
+body.sunset{--grad:linear-gradient(135deg,#ff8a3d 0%,#ff4f6d 55%,#d9468f 100%);--purple:#ffab7a}
+body.sunset .hero,body.sunset .scard{box-shadow:0 22px 44px -22px rgba(255,95,90,.75)}
+body.emerald{--grad:linear-gradient(135deg,#10b981 0%,#14b8a6 55%,#2f80ed 100%);--purple:#5eead4}
+body.emerald .hero,body.emerald .scard{box-shadow:0 22px 44px -22px rgba(20,184,166,.75)}
+/* ---------- магазин ---------- */
+.star{color:#ffc35a}
+.buy{flex:none;display:inline-flex;align-items:center;gap:6px;height:40px;padding:0 16px;border-radius:14px;background:linear-gradient(135deg,#ffcf5a,#ff9f2e);color:#2a1a00;font-weight:800;font-size:15px;white-space:nowrap;box-shadow:0 10px 22px -12px rgba(255,170,50,.9);transition:transform .15s var(--ease)}
+.buy:active{transform:scale(.94)}
+.buy.ghost{background:var(--card2);color:var(--text);box-shadow:none;border:1px solid var(--line)}
+.buy.on{background:rgba(63,214,171,.14);color:var(--teal);box-shadow:none}
+.shop-h{display:flex;align-items:center;gap:12px;margin:0 0 16px}
+.shop-h .si{width:52px;height:52px;border-radius:16px;display:grid;place-items:center;background:linear-gradient(135deg,#ffcf5a,#ff9f2e);color:#2a1a00;flex:none;box-shadow:0 14px 28px -14px rgba(255,170,50,.9)}
+.shop-h b{font-family:var(--disp);font-size:24px;display:block}
+.shop-h span{color:var(--hint);font-size:13px;font-weight:600}
+.sitem{display:flex;align-items:center;gap:12px;padding:12px 0}
+.sitem+.sitem{border-top:1px solid var(--line)}
+.sitem .ii{width:46px;height:46px;border-radius:14px;display:grid;place-items:center;flex:none}
+.sitem .ii.ice{background:linear-gradient(135deg,#8ccaff,#3b82f6);color:#fff}
+.sitem .ii.fire{background:var(--grad);color:#fff}
+.sitem .ii.gold{background:rgba(255,195,90,.15);color:var(--gold)}
+.sitem .meta{flex:1;min-width:0}
+.sitem .meta b{display:block;font-weight:800}
+.sitem .meta span{color:var(--hint);font-size:13px;font-weight:600}
+.sitem .tag{display:inline-block;margin-left:6px;padding:2px 7px;border-radius:999px;background:rgba(63,214,171,.15);color:var(--teal);font-size:11px;font-weight:800;vertical-align:2px}
+.repair{position:relative;overflow:hidden;border-radius:24px;padding:18px;margin-bottom:12px;background:linear-gradient(135deg,rgba(255,138,61,.22),rgba(229,80,138,.22));border:1px solid rgba(255,138,61,.35)}
+.repair b{font-family:var(--disp);font-size:19px;display:block;margin:6px 0 4px}
+.repair p{margin:0 0 14px;color:#f0d9e6;font-weight:600;font-size:14px}
+.thg{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.thc{background:var(--card2);border:1px solid var(--line);border-radius:18px;padding:10px;display:flex;flex-direction:column;gap:8px;align-items:stretch}
+.thc.act{border-color:rgba(63,214,171,.6)}
+.thc .sw2{height:54px;border-radius:12px}
+.thc b{font-size:13px;font-weight:800;text-align:center}
+.thc .buy{height:34px;padding:0 8px;font-size:13px;justify-content:center}
+.tips{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.tips .buy{justify-content:center;height:46px}
+.banner.fix{border-color:rgba(255,138,61,.45);width:100%;text-align:left;color:var(--text)}
+.banner.fix .bi{background:var(--grad);color:#fff}
+.banner.fix .buy{height:34px;padding:0 12px;font-size:13px;margin-left:auto}
+.shoprow{display:flex;align-items:center;gap:12px;width:100%;text-align:left}
+.gitems{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0}
+.gitems button{padding:8px 12px;border-radius:12px;background:var(--card2);border:1px solid var(--line);font-weight:700;font-size:13px}
+.gitems button.on{background:rgba(164,139,255,.18);border-color:rgba(164,139,255,.6);color:var(--text)}
+.gstep{display:flex;align-items:center;gap:12px;margin:4px 0 12px;font-weight:700}
+.gstep button{width:38px;height:38px;border-radius:12px;background:var(--card2);border:1px solid var(--line);display:grid;place-items:center}
+.gmsg{margin-top:10px;font-weight:700;font-size:14px}
+.gmsg.err{color:var(--danger)}
+.pr{display:flex;align-items:center;gap:10px;padding:9px 0}
+.pr+.pr{border-top:1px solid var(--line)}
+.pr .meta{flex:1;min-width:0}
+.pr .meta b{display:block;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pr .meta span{color:var(--hint);font-size:12px;font-weight:600}
+.pr .st2{font-weight:800;white-space:nowrap}
+.pr .rf{padding:6px 10px;border-radius:10px;background:var(--card2);border:1px solid var(--line);font-size:12px;font-weight:800;color:var(--danger)}
+.pr .rfd{font-size:12px;font-weight:800;color:var(--hint)}
 /* ---------- панель владельца ---------- */
 .iconbtn.crown{color:var(--gold)}
 .adm .tiles4{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
@@ -630,7 +684,7 @@ function ring(size, sw, p, k, stroke = 'url(#gR)', track = 'rgba(255,255,255,.08
 }
 
 /* ---------- XP, уровни, лига ---------- */
-const UPD_VER = '2.2';
+const UPD_VER = '2.3';
 const XP_HABIT = 10, XP_DAY = 20, XP_MULT = 1.5, XP_MULT_FROM = 7;
 const LEVEL_AT = [0, 50, 150, 300, 500, 750, 1000, 1500, 2000, 2750, 3500, 4500];
 const levelStart = l => l <= LEVEL_AT.length ? LEVEL_AT[l - 1] : LEVEL_AT[LEVEL_AT.length - 1] + (l - LEVEL_AT.length) * 1000;
@@ -654,7 +708,8 @@ const S = {
   habits: [], log: {}, cfg: JSON.parse(JSON.stringify(DEF_CFG)), cfgDraft: null,
   tab: 'today', view: 'main', sel: todayKey(), detailId: null, form: null, formBack: 'main', calOff: 0, statP: 'month',
   lastToday: todayKey(), lastView: null, sim: null, pulse: null,
-  td: { d: '', t: {} }, meta: { lvl: 0, upd: '', theme: '', gifts: [], mk: 0 }, league: null, leagueErr: false, leagueLoading: false,
+  td: { d: '', t: {} }, meta: { lvl: 0, upd: '', theme: '', gifts: [], mk: 0, themes: [], rep: [], repc: 0 }, shop: null,
+  grant: { who: '', item: 'freeze', n: 1, msg: '', err: false, cands: null }, league: null, leagueErr: false, leagueLoading: false,
   isAdmin: false, news: null, bot: '', admin: null, adminErr: false,
 };
 const A = {}; // прошлые значения для анимаций
@@ -811,7 +866,8 @@ function setVal(h, k, v) {
    XP: +10 за выполненную привычку (за «отказ» — в конце чистого дня), +20 за закрытый день, ×1,5 при серии от 7 дней.
    Всё считается из истории отметок, поэтому XP нельзя «накрутить» отдельно от привычек. */
 const FREEZE_START = 1, FREEZE_EVERY = 7;
-function streakSim() {
+function streakSim(extraRep) {
+  const rep = new Set([...(S.meta.rep || []), ...(extraRep || [])]);
   const t = todayKey(), r = { streak: 0, best: 0, freezes: FREEZE_START, todayDone: false, status: {}, earned: {}, xp: 0, dayXp: {}, level: 1, cap: 1, mult: 1, first: t };
   if (!S.habits.length) return r;
   let k = S.habits.reduce((m, h) => (h.created < m ? h.created : m), t), streak = 0;
@@ -824,6 +880,7 @@ function streakSim() {
     if (!hs.length) st = 'none';
     else if (hs.every(h => success(h, k))) st = 'done';
     else if (k === t) st = 'pending';
+    else if (rep.has(k)) st = 'frozen';                       // починка серии из магазина
     else if (r.freezes > 0) { r.freezes--; st = 'frozen'; }
     else { st = 'missed'; streak = 0; }
     const n = hs.filter(h => success(h, k) && (h.type !== 'quit' || k < t)).length;
@@ -836,6 +893,14 @@ function streakSim() {
   }
   r.streak = streak; r.todayDone = r.status[t] === 'done';
   return r;
+}
+// Серия сгорела вчера (или вчера и позавчера) — её можно вернуть починкой
+function repairOffer() {
+  const sim = S.sim || streakSim(), t = todayKey(), y = addDays(t, -1), y2 = addDays(t, -2);
+  if (sim.status[y] !== 'missed') return null;
+  const days = sim.status[y2] === 'missed' ? [y2, y] : [y];
+  const fixed = streakSim(days);
+  return fixed.streak > sim.streak && fixed.streak >= 2 ? { days, streak: fixed.streak } : null;
 }
 function weekXp(sim) { const t = todayKey(), mon = addDays(t, -(isoWd(t) - 1)); let s = 0; for (let d = mon; d <= t; d = addDays(d, 1)) s += sim.dayXp[d] || 0; return s; }
 
@@ -852,7 +917,7 @@ function overlay(inner, onClick) {
   document.body.appendChild(ov);
 }
 const ask = (msg, okText = 'Удалить') => new Promise(res => overlay(`<p>${esc(msg)}</p><div class="row2"><button class="btn dark" data-r="0">Отмена</button><button class="btn red" data-r="1">${esc(okText)}</button></div>`, r => res(r === '1')));
-function celebrate(n, earned) {
+function celebrate(n, earned, sub) {
   const cols = ['#ffb04a', '#f0507e', '#8b4dff', '#ffe27a', '#ffffff'];
   let parts = '';
   for (let i = 0; i < 30; i++) {
@@ -862,7 +927,7 @@ function celebrate(n, earned) {
   const ov = document.createElement('div'); ov.className = 'cele';
   ov.innerHTML = `<div class="cele-in"><div class="cele-glow"></div><div class="cele-parts">${parts}</div>${flame(130)}
     <div class="cele-n">${Math.max(0, n - 1)}</div><div class="cele-t">${plural(n, 'день', 'дня', 'дней')} подряд</div>
-    <div class="cele-s">${earned ? '❄️ +1 заморозка за неделю подряд' : 'День закрыт — огонёк горит!'}</div></div>`;
+    <div class="cele-s">${sub || (earned ? '❄️ +1 заморозка за неделю подряд' : 'День закрыт — огонёк горит!')}</div></div>`;
   document.body.appendChild(ov);
   requestAnimationFrame(() => requestAnimationFrame(() => ov.classList.add('show')));
   const num = ov.querySelector('.cele-n');
@@ -946,6 +1011,8 @@ function viewToday() {
   let banner = '';
   const y = addDays(t, -1), ys = sim.status[y];
   if (isT && ys === 'frozen') banner = `<div class="banner ice st" style="--i:2"><div class="bi">${ic('snow', 20)}</div><div>Вчера сработала заморозка — серия <b>${dni(sim.streak)}</b> сохранена</div></div>`;
+  const off = isT && ys === 'missed' ? repairOffer() : null;
+  if (off) banner = `<button class="banner fix st" style="--i:2" data-act="shop"><div class="bi">${flame(22)}</div><div>Серия <b>${dni(off.streak)}</b> сгорела. Можно вернуть</div><span class="buy">${S.meta.repc ? 'Бесплатно' : `${ic('star', 13, 2.4)}${price('repair')}`}</span></button>`;
   else if (isT && ys === 'missed' && !sim.todayDone) banner = `<div class="banner miss st" style="--i:2"><div class="bi">${ic('flame', 20)}</div><div>Серия прервалась. Закрой сегодняшний день — и огонёк загорится снова</div></div>`;
   const title = isT ? 'Сегодня' : cap(`${WD[isoWd(k) - 1]}, ${dm(k)}`);
   const ro = isT ? '' : `<div class="ro-note">${ic('lock', 18, 2.2)}<span>Прошлые дни только для просмотра — отмечать можно сегодня</span><button data-act="pick" data-d="${t}">К сегодня</button></div>`;
@@ -1118,10 +1185,84 @@ function viewStreak() {
       <div class="fzp"><span>${full ? 'Запас полный 💪' : `Новая заморозка через ${dni(toNext)}`}</span><em>${full ? `${sim.cap} / ${sim.cap}` : `${prog} / ${FREEZE_EVERY}`}</em></div>
       <div class="pb ice"><i data-a="w" data-k="fzp" data-v="${full ? 1 : prog / FREEZE_EVERY}"></i></div>
       <div class="small">Каждые ${FREEZE_EVERY} дней серии дают одну заморозку, слотов сейчас: ${sim.cap}.${capNote}</div></div>
-    <button class="btn st" style="--i:3;margin-bottom:8px" data-act="share">${ic('share', 20, 2.4)}Поделиться серией</button>`;
+    <button class="card st shoprow" style="--i:3" data-act="shop"><span class="sitem" style="padding:0;flex:1"><span class="ii gold">${ic('star', 24, 2.4)}</span><span class="meta"><b>Магазин</b><span>Заморозки, починка серии и темы</span></span></span><span class="chev">${ic('right', 18, 2.4)}</span></button>
+    <button class="btn st" style="--i:4;margin-bottom:8px" data-act="share">${ic('share', 20, 2.4)}Поделиться серией</button>`;
   return [body, ''];
 }
 function shareStreak() { shareText(`🔥 Моя серия в трекере привычек — ${dni(S.sim.streak)} подряд! Присоединяйся`); }
+
+/* ---------- магазин ---------- */
+const price = item => (S.shop && S.shop[item]) || { freeze: 25, freeze3: 60, repair: 75, theme_midnight: 50, theme_sunset: 50, theme_emerald: 50, tip50: 50, tip100: 100, tip250: 250 }[item];
+const starBtn = (item, extra = '') => `<button class="buy" data-act="buy" data-v="${item}"${extra}>${ic('star', 15, 2.4)}${price(item)}</button>`;
+function viewShop() {
+  const sim = S.sim, off = repairOffer(), t = todayKey();
+  const when = off ? (off.days.length > 1 ? 'вчера и позавчера' : 'вчера') : '';
+  const repair = off ? `<div class="repair st" style="--i:1">${flame(34)}<b>Вернуть серию — ${dni(off.streak)}</b>
+      <p>Серия сгорела ${when}. Починка вернёт её так, будто пропуска не было. Не откладывай: починка доступна, только пока с пропуска прошло не больше двух дней.</p>
+      ${S.meta.repc ? `<button class="btn" data-act="repfree">${ic('gift', 20, 2.2)}Вернуть бесплатно — подарок</button>`
+        : `<button class="btn" data-act="buy" data-v="repair">${ic('star', 20, 2.4)}Вернуть за ${price('repair')}</button>`}</div>`
+    : `<div class="card st" style="--i:1"><div class="sitem"><span class="ii fire">${flame(24)}</span><div class="meta"><b>Починка серии${S.meta.repc ? `<span class="tag">подарок ×${S.meta.repc}</span>` : ''}</b>
+      <span>Если серия сгорит, её можно вернуть в течение двух дней — кнопка появится здесь и на главном экране.</span></div></div></div>`;
+  const thc = Object.entries(THEMES).map(([id, th]) => {
+    const own = themeOwned(id), act = own && S.meta.theme === id;
+    const btn = act ? `<button class="buy on" data-act="settheme" data-v="">Включена</button>` : own ? `<button class="buy ghost" data-act="settheme" data-v="${id}">Включить</button>` : starBtn('theme_' + id);
+    return `<div class="thc${act ? ' act' : ''}"><div class="sw2" style="background:linear-gradient(135deg,${th.c.join(',')})"></div><b>${th.name}</b>${btn}</div>`;
+  }).join('');
+  const body = `<div class="nav"><button class="back" data-act="back">${ic('left', 20, 2.4)}Назад</button><span class="navnote">Звёзды Telegram</span></div>
+    <div class="shop-h st" style="--i:0"><span class="si">${ic('star', 26, 2.4)}</span><div><b>Магазин</b><span>Покупки не дают XP и не влияют на лигу</span></div></div>
+    ${repair}
+    <div class="card st" style="--i:2"><div class="card-h"><b>Заморозки</b><span>сейчас ${sim.freezes}</span></div>
+      <div class="sitem"><span class="ii ice">${ic('snow', 24, 2.2)}</span><div class="meta"><b>Заморозка</b><span>Сработает сама, если пропустишь день</span></div>${starBtn('freeze')}</div>
+      <div class="sitem"><span class="ii ice">${ic('snow', 24, 2.2)}</span><div class="meta"><b>3 заморозки<span class="tag">выгодно</span></b><span>Запас на отпуск или болезнь</span></div>${starBtn('freeze3')}</div>
+      <div class="small">Купленные заморозки идут сверх слотов уровня.</div></div>
+    <div class="card st" style="--i:3"><div class="card-h"><b>Темы оформления</b><span>навсегда</span></div><div class="thg">${thc}</div>
+      ${S.meta.theme && themeOwned(S.meta.theme) ? `<button class="small" data-act="settheme" data-v="" style="display:block;margin:12px auto 0;color:var(--purple)">Вернуть стандартную тему</button>` : ''}
+      <div class="small">«Полночь» открывается бесплатно на 10 уровне.</div></div>
+    <div class="card st" style="--i:4"><div class="card-h"><b>Поддержать автора</b><span>без товара</span></div>
+      <div class="small" style="margin:0 0 12px">Трекер бесплатный и без рекламы. Если он помогает — можно сказать спасибо звёздами 💜</div>
+      <div class="tips">${['tip50', 'tip100', 'tip250'].map(x => starBtn(x)).join('')}</div></div>
+    <div class="small st" style="--i:5;margin:4px 4px 0">Вопросы по оплате — команда /paysupport в чате с ботом. Звёзды можно купить прямо в окне оплаты Telegram.</div>`;
+  return [body, ''];
+}
+async function buy(item) {
+  if (!inTG || !ver('6.1') || !tg.openInvoice) { toast('Покупки работают внутри Telegram'); return; }
+  const extra = {};
+  if (item === 'repair') { const off = repairOffer(); if (!off) { toast('Сейчас нечего чинить'); return; } extra.days = off.days; }
+  hap.tap();
+  let j;
+  try { j = await api('/api/buy', { item, ...extra }); } catch (e) { j = { ok: false }; }
+  if (!j.ok) { toast(j.error && j.error.length < 70 ? j.error : 'Не получилось открыть оплату — попробуй позже'); return; }
+  tg.openInvoice(j.link, status => {
+    if (status === 'paid') { hap.ok(); toast('Оплачено! Добавляю покупку…'); afterPay(item); }
+    else if (status === 'failed') toast('Оплата не прошла');
+  });
+}
+async function afterPay(item) {
+  const before = JSON.stringify([S.meta.gifts, S.meta.themes, S.meta.rep]);
+  for (let i = 0; i < 6; i++) {
+    await new Promise(r => setTimeout(r, 1200));
+    await whoami();
+    if (JSON.stringify([S.meta.gifts, S.meta.themes, S.meta.rep]) !== before || item.startsWith('tip')) break;
+  }
+  if (item.startsWith('theme_')) { S.meta.theme = item.slice(6); saveMeta(); }
+  S.lastView = null; render();
+  if (item === 'repair') celebrate(S.sim.streak, false, 'Серия восстановлена — огонёк снова горит!');
+  else toast(item.startsWith('tip') ? 'Спасибо за поддержку! 💜' : '✅ Покупка добавлена');
+}
+async function repairFree() {
+  const off = repairOffer(); if (!off) return;
+  try {
+    const j = await api('/api/repair', { days: off.days }); if (!j.ok) throw new Error(j.error);
+    applyPerks(j.perks); S.lastView = null; render(); hap.ok(); celebrate(S.sim.streak, false, 'Серия восстановлена — подарок сработал!');
+  } catch (e) { toast('Не получилось — попробуй ещё раз'); }
+}
+function applyPerks(pk) {
+  if (!pk) return false;
+  const was = JSON.stringify([S.meta.themes, S.meta.rep, S.meta.repc]);
+  S.meta.themes = pk.themes || []; S.meta.rep = pk.repairs || []; S.meta.repc = pk.repc || 0;
+  if (JSON.stringify([S.meta.themes, S.meta.rep, S.meta.repc]) === was) return false;
+  saveMeta(); return true;
+}
 
 /* ---------- экран уровня ---------- */
 function viewLevel() {
@@ -1139,7 +1280,7 @@ function viewLevel() {
     const r = REWARDS[x], st = x < l ? 'got' : x === l ? 'cur' : x === nextL ? 'next' : 'lock';
     const sub = st === 'got' ? 'получено' : st === 'cur' ? 'текущий уровень' : st === 'next' ? `через ${fmt(levelStart(x) - sim.xp)} XP` : `на ${x} уровне`;
     let right = st === 'got' ? `<span class="rw-r ok">${ic('check', 22, 2.6)}</span>` : st === 'next' ? `<span class="rw-r${r.ice ? ' ice' : ''}">${ic(r.icon, 20, 2.2)}</span>` : st === 'lock' ? `<span class="rw-r">${ic('lock', 18, 2.2)}</span>` : '';
-    if (x === 10 && l >= 10) right = `<button class="sw${S.meta.theme === 'midnight' ? ' on' : ''}" data-act="theme" aria-label="Тема «Полночь»"></button>`;
+    if (x === 10 && themeOwned('midnight')) right = `<button class="sw${S.meta.theme === 'midnight' ? ' on' : ''}" data-act="theme" aria-label="Тема «Полночь»"></button>`;
     return `<div class="rw-i ${st}"><span class="rw-n">${x}</span><div class="meta"><b>${r.t}</b><span>${sub}</span></div>${right}</div>`;
   }).join('');
   const place = S.league && S.league.place ? [S.league.place, 'место'] : ['—', ''];
@@ -1180,7 +1321,7 @@ function levelUp(l, preview) {
   });
 }
 const newsVer = () => S.news && S.news.ver ? 'n' + S.news.ver : UPD_VER;
-const newsTitle = () => S.news && S.news.title ? S.news.title : `Обновление ${UPD_VER}: отметки из чата и итоги недели`;
+const newsTitle = () => S.news && S.news.title ? S.news.title : `Обновление ${UPD_VER}: магазин, починка серии и новые темы`;
 function feedbackLink() {
   if (!S.bot) { toast('Напиши боту команду /feedback'); return; }
   const u = `https://t.me/${S.bot}?start=feedback`;
@@ -1195,6 +1336,7 @@ function whatsNew() {
     return;
   }
   const items = [
+    ['star', 'Магазин', 'Заморозки, починка сгоревшей серии и новые темы «Закат» и «Изумруд» — за звёзды Telegram. Вход — на вкладке «Серия».'],
     ['check', 'Отметки прямо из чата', 'В напоминаниях появились кнопки «✅ Сделал» и «+1» — привычка засчитается без открытия трекера.'],
     ['chart', 'Итоги недели', 'В воскресенье вечером бот пришлёт, сколько дней закрыто, сколько XP набрано, место в лиге и лучшую привычку.'],
     ['download', 'Резервная копия', 'В напоминаниях → «Отправить копию в чат». Чтобы восстановить, перешли файл боту.'],
@@ -1237,6 +1379,7 @@ function viewAdmin() {
       <div class="tile"><div class="tl">${ic('flame', 15, 2.4)}Активные</div><b>${st.act1}</b><span>за сутки · ${st.act7} за неделю</span></div>
       <div class="tile"><div class="tl">${ic('trophy', 15, 2.2)}В лиге</div><b>${st.league}</b><span>на этой неделе</span></div>
       <div class="tile"><div class="tl">${ic('ban', 15, 2.2)}Заблокировали</div><b>${st.blocked}</b><span>бота</span></div></div>
+    ${adminShop(D)}
     <div class="card st" style="--i:2"><div class="card-h"><b>Новые пользователи</b><span>${sum(sr.new)} за 30 дней</span></div>${bars(sr.new)}
       <div class="chx"><span>${shortDay(sr.days[0])}</span><span>${shortDay(sr.days[Math.floor(n / 2)])}</span><span>сегодня</span></div></div>
     <div class="card st" style="--i:3"><div class="card-h"><b>Активные по дням</b><span>сегодня ${sr.active[n - 1]}</span></div>${bars(sr.active, 'teal')}
@@ -1258,6 +1401,45 @@ function viewAdmin() {
       <code>/league</code> группы лиги · <code>/ban</code> исключить · <code>/report</code> отчёт · <code>/admin</code> все команды.<br>
       Отчёт приходит каждый день в ${D.reportHour}:00 МСК, ошибки бота — сразу.</div></div></div>`;
   return [body, ''];
+}
+function adminShop(D) {
+  const sh = D.shop || { count: 0, total: 0, d30: 0, recent: [] }, G = S.grant, items = D.items || {};
+  const order = ['freeze', 'repair', 'theme_midnight', 'theme_sunset', 'theme_emerald'];
+  const label = k => k === 'freeze' ? 'Заморозки' : (items[k] && items[k].title) || k;
+  const chips = order.filter(k => items[k] || k === 'freeze').map(k => `<button class="${G.item === k ? 'on' : ''}" data-act="gitem" data-v="${k}">${esc(label(k))}</button>`).join('');
+  const cands = G.cands ? `<div class="gitems">${G.cands.map(c => `<button data-act="gpick" data-v="${c.id}">${esc(c.name)}${c.username ? ' @' + esc(c.username) : ''} · ${c.id}</button>`).join('')}</div>` : '';
+  const rows = sh.recent.length ? sh.recent.slice(0, 15).map(r => `<div class="pr"><div class="meta"><b>${esc(r.name)} — ${esc(r.title)}</b><span>${shortDay(r.day)}</span></div>
+      <span class="st2">${r.stars} ⭐</span>${r.status === 'paid' ? `<button class="rf" data-act="refund" data-uid="${r.uid}" data-v="${r.id}" data-s="${r.stars}" data-n="${esc(r.name)}">Вернуть</button>` : '<span class="rfd">возврат</span>'}</div>`).join('')
+    : '<div class="small" style="margin:0">Покупок пока нет</div>';
+  return `<div class="card st" style="--i:1"><div class="card-h"><b>Выдать пользователю</b><span>бесплатно</span></div>
+      <input class="inp sm" id="gwho" style="margin:0" placeholder="ID, @username или имя · себе — me" value="${esc(G.who)}" autocomplete="off">
+      <div class="gitems">${chips}</div>
+      ${G.item === 'freeze' ? `<div class="gstep"><button data-act="gn" data-v="-1">${ic('minus', 16, 2.6)}</button><span>${G.n} ${plural(G.n, 'заморозка', 'заморозки', 'заморозок')}</span><button data-act="gn" data-v="1">${ic('plus', 16, 2.6)}</button></div>` : ''}
+      <button class="btn" data-act="grant">${ic('gift', 20, 2.2)}Выдать</button>
+      ${G.msg ? `<div class="gmsg${G.err ? ' err' : ''}">${esc(G.msg)}</div>` : ''}${cands}</div>
+    <div class="card st" style="--i:1"><div class="card-h"><b>Магазин</b><span>звёзды Telegram</span></div>
+      <div class="ret" style="margin-bottom:12px"><div class="tile"><b>${fmt(sh.total)}</b><span>⭐ всего</span></div><div class="tile"><b>${fmt(sh.d30)}</b><span>⭐ за 30 дней</span></div><div class="tile"><b>${sh.count}</b><span>покупок</span></div></div>
+      ${rows}
+      <div class="small">Вывод звёзд — через Fragment: от 1000 ⭐, спустя 21 день после покупки.</div></div>`;
+}
+async function doGrant() {
+  const G = S.grant, inp = document.getElementById('gwho'); if (inp) G.who = inp.value.trim();
+  if (!G.who) { G.msg = 'Напиши, кому выдать'; G.err = true; render(); return; }
+  G.msg = 'Выдаю…'; G.err = false; G.cands = null; render();
+  try {
+    const j = await api('/api/admin/grant', { who: G.who, item: G.item, n: G.n });
+    G.msg = j.ok ? j.text : j.error || 'Не получилось'; G.err = !j.ok && !j.candidates; G.cands = j.candidates || null;
+    if (j.ok) { hap.ok(); G.who = ''; whoami(); }
+  } catch (e) { G.msg = 'Бот недоступен — попробуй позже'; G.err = true; }
+  render();
+}
+async function doRefund(el) {
+  if (!(await ask(`Вернуть ${el.dataset.s} ⭐ пользователю ${el.dataset.n}? Купленное у него заберём.`, 'Вернуть'))) return;
+  try {
+    const j = await api('/api/admin/refund', { uid: +el.dataset.uid, id: +el.dataset.v });
+    toast(j.text || 'Не получилось'); if (j.shop && S.admin) S.admin.shop = j.shop;
+  } catch (e) { toast('Бот недоступен'); }
+  render();
 }
 async function loadAdmin() {
   if (!inTG) return;
@@ -1314,9 +1496,9 @@ async function doRestore() {
     for (let i = 0; i < cur.length; i += 50) await store.remove(cur.slice(i, i + 50));
     for (const [k, v] of Object.entries(j.items)) await store.set(k, v);
     S.habits = []; S.log = {}; S.cfg = JSON.parse(JSON.stringify(DEF_CFG)); S.td = { d: '', t: {} };
-    S.meta = { lvl: 0, upd: '', theme: '', gifts: [], mk: 0 };
+    S.meta = { lvl: 0, upd: '', theme: '', gifts: [], mk: 0, themes: [], rep: [], repc: 0 };
     await load();
-    S.meta.gifts = keep.gifts || []; S.meta.mk = Math.max(S.meta.mk || 0, keep.mk || 0); S.meta.upd = keep.upd; S.meta.wk2 = 1;
+    S.meta.gifts = keep.gifts || []; S.meta.themes = keep.themes || []; S.meta.rep = keep.rep || []; S.meta.repc = keep.repc || 0; S.meta.mk = Math.max(S.meta.mk || 0, keep.mk || 0); S.meta.upd = keep.upd; S.meta.wk2 = 1;
     S.meta.lvl = streakSim().level; saveMeta();
     await api('/api/restore', { action: 'drop' });
     S.view = 'main'; S.tab = 'today'; S.sel = todayKey(); S.lastView = null; render(); scheduleSync(); hap.ok();
@@ -1343,13 +1525,16 @@ async function whoami() {
     if (j.restore) setTimeout(() => offerRestore(j.restore), 500);
     const before = JSON.stringify(S.meta.gifts || []), had = S.isAdmin, hadNews = S.news && S.news.ver;
     S.isAdmin = !!j.admin; S.news = j.news || null; S.bot = j.bot || '';
-    const gifts = (j.gifts || []).map(g => ({ day: g.day, n: g.n }));
+    const gifts = (j.gifts || []).map(g => ({ day: g.day, n: g.n, src: g.src || 'gift' }));
+    if (j.shop) S.shop = j.shop;
+    const perksChanged = applyPerks(j.perks);
     if (JSON.stringify(gifts) !== before) {
-      const add = gifts.reduce((a, g) => a + g.n, 0) - (S.meta.gifts || []).reduce((a, g) => a + g.n, 0);
+      const gsum = a => (a || []).filter(g => g.src !== 'buy').reduce((x, g) => x + g.n, 0);
+      const add = gsum(gifts) - gsum(S.meta.gifts);
       S.meta.gifts = gifts; saveMeta();
       if (add > 0) toast(`🎁 Тебе подарили ${add} ${plural(add, 'заморозку', 'заморозки', 'заморозок')}!`);
     }
-    if (S.view === 'main' && (had !== S.isAdmin || (S.news && S.news.ver) !== hadNews || JSON.stringify(gifts) !== before)) render();
+    if ((S.view === 'main' || S.view === 'shop') && (perksChanged || had !== S.isAdmin || (S.news && S.news.ver) !== hadNews || JSON.stringify(gifts) !== before)) render();
   } catch (e) { /* бот недоступен */ }
 }
 
@@ -1426,11 +1611,18 @@ async function shareText(text) {
   hap.tap();
   if (inTG && ver('6.1')) tg.openTelegramLink(link); else window.open(link, '_blank');
 }
+const THEMES = {
+  midnight: { name: 'Полночь', c: ['#2563eb', '#0ea5e9', '#22d3ee'] },
+  sunset: { name: 'Закат', c: ['#ff8a3d', '#ff4f6d', '#d9468f'] },
+  emerald: { name: 'Изумруд', c: ['#10b981', '#14b8a6', '#2f80ed'] },
+};
+const BASE_C = ['#7a4dff', '#b14fd6', '#e5508a'];
+const themeOwned = id => (S.meta.themes || []).includes(id) || (id === 'midnight' && S.sim && S.sim.level >= 10);
 function applyTheme() {
-  const on = S.meta.theme === 'midnight' && S.sim.level >= 10;
-  document.body.classList.toggle('midnight', on);
-  const st = document.querySelectorAll('#gR stop'), c = on ? ['#2563eb', '#0ea5e9', '#22d3ee'] : ['#7a4dff', '#b14fd6', '#e5508a'];
-  st.forEach((x, i) => x.setAttribute('stop-color', c[i]));
+  const cur = THEMES[S.meta.theme] && themeOwned(S.meta.theme) ? S.meta.theme : '';
+  for (const id of Object.keys(THEMES)) document.body.classList.toggle(id, id === cur);
+  const c = cur ? THEMES[cur].c : BASE_C;
+  document.querySelectorAll('#gR stop').forEach((x, i) => x.setAttribute('stop-color', c[i]));
 }
 
 /* ---------- экран напоминаний ---------- */
@@ -1473,7 +1665,7 @@ function render() {
   const viewId = S.view === 'main' ? 'main-' + S.tab : S.view, entering = viewId !== S.lastView;
   applyTheme();
   const [body, bottom] = S.view === 'detail' ? viewDetail() : S.view === 'form' ? viewForm() : S.view === 'level' ? viewLevel() : S.view === 'admin' ? viewAdmin()
-    : S.view === 'reminders' ? viewReminders() : S.tab === 'today' ? viewToday() : S.tab === 'stats' ? viewStats()
+    : S.view === 'reminders' ? viewReminders() : S.view === 'shop' ? viewShop() : S.tab === 'today' ? viewToday() : S.tab === 'stats' ? viewStats()
     : S.tab === 'league' ? viewLeague() : viewStreak();
   const animCls = entering ? (S.view === 'main' ? ' enter fade' : ' enter push') : '';
   document.getElementById('app').innerHTML = `<div class="view${animCls}">${body}</div>${S.view === 'main' ? tabbar() : bottom}`;
@@ -1572,6 +1764,15 @@ const actions = {
   fevery: el => { S.form.every = +el.dataset.v; hap.sel(); render(); },
   rsw: el => swFlip(el, () => { const k = el.dataset.v; S.cfgDraft[k].on = !S.cfgDraft[k].on; }),
   backup: el => sendBackup(el),
+  shop: () => { hap.sel(); go('shop'); },
+  buy: el => buy(el.dataset.v),
+  repfree: () => repairFree(),
+  settheme: el => { S.meta.theme = el.dataset.v; saveMeta(); hap.sel(); render(); },
+  gitem: el => { S.grant.item = el.dataset.v; const i = document.getElementById('gwho'); if (i) S.grant.who = i.value; hap.sel(); render(); },
+  gn: el => { S.grant.n = Math.max(1, Math.min(10, S.grant.n + +el.dataset.v)); const i = document.getElementById('gwho'); if (i) S.grant.who = i.value; hap.sel(); render(); },
+  gpick: el => { const i = document.getElementById('gwho'); if (i) i.value = el.dataset.v; S.grant.cands = null; doGrant(); },
+  grant: () => doGrant(),
+  refund: el => doRefund(el),
   rsave: () => { S.cfg = S.cfgDraft; saveCfg(); hap.ok(); toast('Напоминания сохранены'); goBack(); },
 };
 document.addEventListener('click', e => {

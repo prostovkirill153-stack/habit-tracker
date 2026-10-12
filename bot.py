@@ -16,6 +16,8 @@
       - «Итоги недели» — в воскресенье: закрытые дни, XP, место в лиге, лучшая привычка
   * кнопки «✅ Сделал» и «+1» прямо в напоминаниях: отметка попадает в приложение при следующем открытии
   * резервная копия: приложение присылает файл в чат, а если переслать его боту — предложит восстановить
+  * магазин за Telegram Stars: заморозки, починка серии, темы, поддержка автора; владелец может выдавать
+    всё это бесплатно и делать возвраты из панели 👑
 
 Запуск:
   BOT_TOKEN=123:ABC WEBAPP_URL=https://твой-домен/ [DATABASE_URL=postgresql://...] python bot.py
@@ -46,8 +48,10 @@ from aiogram.types import (
     CallbackQuery,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
+    LabeledPrice,
     MenuButtonWebApp,
     Message,
+    PreCheckoutQuery,
     WebAppInfo,
 )
 from aiogram.utils.web_app import safe_parse_webapp_init_data
@@ -103,6 +107,21 @@ BOT = None  # экземпляр Bot: нужен HTTP-обработчикам (
 BACKUP_KEY_RE = re.compile(r"^(h_[A-Za-z0-9_-]{1,32}|l_[A-Za-z0-9_-]{1,32}_\d{6}|cfg|meta|td)$")
 BACKUP_MAX = 2 * 1024 * 1024
 
+# магазин за Telegram Stars (валюта XTR). kind: что выдаём после оплаты
+THEMES = {"midnight": "Полночь", "sunset": "Закат", "emerald": "Изумруд"}
+ITEMS = {
+    "freeze": {"title": "Заморозка", "stars": 25, "kind": "freeze", "n": 1,
+               "desc": "Одна заморозка: сохранит серию, если пропустишь день."},
+    "freeze3": {"title": "3 заморозки", "stars": 60, "kind": "freeze", "n": 3,
+                "desc": "Набор из трёх заморозок — выгоднее, чем по одной."},
+    "repair": {"title": "Починка серии", "stars": 75, "kind": "repair",
+               "desc": "Вернёт серию, которая сгорела за последние два дня."},
+    **{f"theme_{k}": {"title": f"Тема «{v}»", "stars": 50, "kind": "theme", "theme": k,
+                      "desc": f"Тема оформления «{v}» — навсегда."} for k, v in THEMES.items()},
+    **{f"tip{n}": {"title": "Поддержать автора", "stars": n, "kind": "tip",
+                   "desc": f"Спасибо за поддержку! {n} ⭐ помогут развивать трекер."} for n in (50, 100, 250)},
+}
+
 SCHEMA = [
     """CREATE TABLE IF NOT EXISTS profiles(
         user_id   BIGINT  PRIMARY KEY,
@@ -147,6 +166,22 @@ SCHEMA = [
         user_id BIGINT PRIMARY KEY,
         created BIGINT NOT NULL,
         data    TEXT   NOT NULL)""",
+    """CREATE TABLE IF NOT EXISTS purchases(
+        user_id BIGINT  NOT NULL,
+        created BIGINT  NOT NULL,
+        item    TEXT    NOT NULL,
+        stars   INTEGER NOT NULL,
+        charge  TEXT    NOT NULL,
+        info    TEXT    NOT NULL DEFAULT '',
+        status  TEXT    NOT NULL DEFAULT 'paid',
+        PRIMARY KEY(user_id, created))""",
+    """CREATE TABLE IF NOT EXISTS perks(
+        user_id BIGINT NOT NULL,
+        created BIGINT NOT NULL,
+        kind    TEXT   NOT NULL,
+        value   TEXT   NOT NULL DEFAULT '',
+        src     TEXT   NOT NULL DEFAULT '',
+        PRIMARY KEY(user_id, created))""",
     """CREATE TABLE IF NOT EXISTS gifts(
         user_id BIGINT  NOT NULL,
         created BIGINT  NOT NULL,
@@ -161,6 +196,7 @@ MIGRATIONS = [
     "ALTER TABLE users ADD COLUMN name TEXT",
     "ALTER TABLE users ADD COLUMN blocked INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE players ADD COLUMN banned INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE gifts ADD COLUMN src TEXT",
 ]
 
 
@@ -300,6 +336,18 @@ class Store:
         if db:
             await self.execute("DELETE FROM sent WHERE day < $1", cutoff)
             await self.execute("DELETE FROM marks WHERE created < $1", int((time.time() - 14 * 86400) * 1000))
+
+    async def insert_ts(self, table: str, cols: tuple[str, ...], user_id: int, *values) -> int:
+        """Вставка строки с уникальным (user_id, created). created — миллисекунды; при совпадении сдвигаем."""
+        created = int(time.time() * 1000)
+        names = ", ".join(("user_id", "created") + cols)
+        marks = ", ".join(f"${i}" for i in range(1, len(cols) + 3))
+        for _ in range(20):
+            if await self.execute(f"INSERT INTO {table}({names}) VALUES({marks}) ON CONFLICT DO NOTHING",
+                                  user_id, created, *values):
+                return created
+            created += 1
+        raise RuntimeError("insert_ts: no free timestamp")
 
     async def add_mark(self, user_id: int, habit: str, day: str, v: int) -> int:
         """Отметка из чата (кнопка в напоминании). Приложение заберёт её при открытии."""
@@ -579,9 +627,119 @@ async def report_text() -> str:
     tagged = [f"{s} — {n}" for s, n in srcs if s != "без метки"][:5]
     if tagged:
         lines.append("🔗 Источники (всего): " + ", ".join(tagged))
+    sh = await shop_stats()
+    if sh["count"]:
+        lines.append(f"⭐ Магазин: вчера {sh['yday']} ⭐, за 30 дней {sh['d30']} ⭐, всего {sh['total']} ⭐")
     lines.append(f"🗄 Лимиты: {limits_text(lm)}")
     lines.append("\nПодробнее — панель 👑 в приложении или /stats")
     return "\n".join(lines)
+
+
+# ---------- магазин ----------
+async def add_gift(user_id: int, n: int, src: str) -> int:
+    return await DB.insert_ts("gifts", ("day", "n", "src"), user_id, msk_day(), n, src)
+
+
+def repair_days_ok(days: list, user_id: int) -> bool:
+    """Чинить можно только вчера и позавчера (по времени пользователя)."""
+    tz = DB.profiles.get(user_id, (180, ""))[0]
+    local = datetime.now(timezone.utc) + timedelta(minutes=tz)
+    allowed = {(local - timedelta(days=i)).strftime("%Y-%m-%d") for i in (1, 2)}
+    return 0 < len(days) <= 2 and all(d in allowed for d in days)
+
+
+async def owned_themes(user_id: int) -> set[str]:
+    return {r["value"] for r in await DB.fetch("SELECT value FROM perks WHERE user_id = $1 AND kind = 'theme'", user_id)}
+
+
+async def grant(user_id: int, item: str, src: str, days: list | None = None, n: int | None = None) -> str:
+    """Выдаёт товар. Возвращает ссылку на выданное (таблица:created) — чтобы при возврате забрать обратно."""
+    it = ITEMS[item]
+    if it["kind"] == "freeze":
+        return f"gifts:{await add_gift(user_id, n or it['n'], src)}"
+    if it["kind"] == "repair":
+        return f"perks:{await DB.insert_ts('perks', ('kind', 'value', 'src'), user_id, 'repair', ','.join(days or []), src)}"
+    if it["kind"] == "theme":
+        if it["theme"] in await owned_themes(user_id):
+            return ""
+        return f"perks:{await DB.insert_ts('perks', ('kind', 'value', 'src'), user_id, 'theme', it['theme'], src)}"
+    return ""
+
+
+async def revoke(user_id: int, ref: str) -> None:
+    if ":" not in ref:
+        return
+    table, created = ref.split(":", 1)
+    if table in ("gifts", "perks") and created.isdigit():
+        await DB.execute(f"DELETE FROM {table} WHERE user_id = $1 AND created = $2", user_id, int(created))
+
+
+def gift_text(item: str, n: int | None = None) -> str:
+    it = ITEMS[item]
+    if it["kind"] == "freeze":
+        k = n or it["n"]
+        return f"{k} {plural(k, 'заморозку', 'заморозки', 'заморозок')}"
+    if it["kind"] == "repair":
+        return "починку серии — применишь, когда серия сгорит"
+    return it["title"].replace("Тема", "тему")
+
+
+async def perks_for(user_id: int) -> dict:
+    themes, repairs, credits = [], [], 0
+    for r in await DB.fetch("SELECT kind, value FROM perks WHERE user_id = $1 ORDER BY created", user_id):
+        if r["kind"] == "theme":
+            themes.append(r["value"])
+        elif r["kind"] == "repair":
+            if r["value"]:
+                repairs += r["value"].split(",")
+            else:
+                credits += 1
+    return {"themes": themes, "repairs": repairs, "repc": credits}
+
+
+async def shop_stats() -> dict:
+    now = time.time()
+    rows = await DB.fetch("SELECT user_id, created, item, stars, charge, status FROM purchases ORDER BY created DESC")
+    paid = [r for r in rows if r["status"] == "paid"]
+    yday = msk_day(now - 86400)
+    out = {"count": len(paid), "total": sum(r["stars"] for r in paid),
+           "d30": sum(r["stars"] for r in paid if r["created"] >= (now - 30 * 86400) * 1000),
+           "yday": sum(r["stars"] for r in paid if msk_day(r["created"] / 1000) == yday), "recent": []}
+    names = {r["user_id"]: r["name"] or (f"@{r['username']}" if r["username"] else str(r["user_id"]))
+             for r in await DB.fetch("SELECT user_id, name, username FROM users")}
+    for r in rows[:30]:
+        out["recent"].append({"uid": int(r["user_id"]), "id": int(r["created"]), "name": names.get(r["user_id"], str(r["user_id"])),
+                              "title": ITEMS.get(r["item"], {}).get("title", r["item"]), "stars": int(r["stars"]),
+                              "day": msk_day(r["created"] / 1000), "status": r["status"]})
+    return out
+
+
+def parse_payload(payload: str) -> tuple[str, int, list] | None:
+    try:
+        item, uid, days = payload.split("|")
+        return (item, int(uid), [d for d in days.split(",") if d]) if item in ITEMS else None
+    except ValueError:
+        return None
+
+
+async def do_refund(bot: Bot, uid: int, created: int) -> str:
+    row = await DB.fetch("SELECT item, stars, charge, info, status FROM purchases WHERE user_id = $1 AND created = $2", uid, created)
+    if not row:
+        return "Покупка не найдена."
+    r = row[0]
+    if r["status"] != "paid":
+        return "Эта покупка уже возвращена."
+    try:
+        await bot.refund_star_payment(user_id=uid, telegram_payment_charge_id=r["charge"])
+    except TelegramAPIError as e:
+        return f"Telegram не дал вернуть звёзды: {e.message if hasattr(e, 'message') else e}"
+    await revoke(uid, r["info"])
+    await DB.execute("UPDATE purchases SET status = 'refunded' WHERE user_id = $1 AND created = $2", uid, created)
+    try:
+        await bot.send_message(uid, f"↩️ Вернул {r['stars']} ⭐ за «{ITEMS.get(r['item'], {}).get('title', r['item'])}».")
+    except TelegramAPIError:
+        pass
+    return f"↩️ Возврат сделан: {r['stars']} ⭐"
 
 
 # ---------- очистка данных от клиента ----------
@@ -808,6 +966,48 @@ def save_kb(habits: list[dict], day: str) -> InlineKeyboardMarkup:
 router = Router()
 
 
+# --- оплата звёздами ---
+@router.pre_checkout_query()
+async def pre_checkout(q: PreCheckoutQuery) -> None:
+    """Telegram спрашивает перед списанием звёзд — проверяем, что заказ в порядке."""
+    p = parse_payload(q.invoice_payload)
+    err = None
+    if not p or p[1] != q.from_user.id or q.currency != "XTR" or q.total_amount != ITEMS[p[0]]["stars"]:
+        err = "Заказ устарел — открой магазин в трекере ещё раз."
+    elif ITEMS[p[0]]["kind"] == "theme" and ITEMS[p[0]]["theme"] in await owned_themes(p[1]):
+        err = "Эта тема у тебя уже есть 🙂"
+    elif ITEMS[p[0]]["kind"] == "repair" and not repair_days_ok(p[2], p[1]):
+        err = "Починить можно только серию, сгоревшую вчера или позавчера."
+    await q.answer(ok=err is None, error_message=err)
+
+
+@router.message(F.successful_payment)
+async def on_paid(m: Message) -> None:
+    sp = m.successful_payment
+    p = parse_payload(sp.invoice_payload)
+    uid = m.from_user.id
+    if await DB.fetchval("SELECT user_id FROM purchases WHERE charge = $1", sp.telegram_payment_charge_id):
+        return  # уже обработали
+    item = p[0] if p else "unknown"
+    ref = await grant(uid, item, "buy", p[2] if p else None) if p else ""
+    await DB.insert_ts("purchases", ("item", "stars", "charge", "info", "status"), uid,
+                       item, int(sp.total_amount), sp.telegram_payment_charge_id, ref, "paid")
+    it = ITEMS.get(item, {"title": item, "kind": "tip"})
+    thanks = ("Спасибо огромное за поддержку! 💜 Это правда помогает развивать трекер." if it["kind"] == "tip"
+              else f"✅ Готово: {it['title']}. Открой трекер — покупка уже там.")
+    await m.answer(thanks, reply_markup=open_kb())
+    admin = await DB.admin_id()
+    if admin and admin != uid:
+        try:
+            await m.bot.send_message(admin, f"⭐ Покупка: {display_name(m.from_user)}"
+                                            f"{' (@' + m.from_user.username + ')' if m.from_user.username else ''} — "
+                                            f"{it['title']} за {sp.total_amount} ⭐")
+        except TelegramAPIError:
+            pass
+    log.info("purchase %s by %s: %s stars", item, uid, sp.total_amount)
+
+
+
 class TrackUsers(BaseMiddleware):
     """Запоминает каждого, кто пишет боту, — для /stats."""
 
@@ -886,10 +1086,11 @@ ADMIN_HELP = (
     "/league — все группы лиги с ID участников\n"
     "/ban ID — исключить из лиги · /unban ID — вернуть\n"
     "/gift @username или ID [кол-во] — подарить заморозки (по умолчанию 1)\n"
+    "/refund — последние покупки и возврат звёзд\n"
     "/cancel — отменить ответ или рассылку\n\n"
     "🔗 Ссылки с меткой источника: t.me/{bot}?start=insta, t.me/{bot}?start=vk и т.п. — "
     "метки видны в /stats, отчёте и панели.\n"
-    "📊 Графики, удержание и лимиты — кнопка 👑 в приложении.\n"
+    "📊 Графики, удержание, лимиты, покупки и выдача товаров — кнопка 👑 в приложении.\n"
     "⚠️ Если в боте случится ошибка, я пришлю её сюда."
 )
 
@@ -1003,6 +1204,35 @@ async def cb_feedback_reply(c: CallbackQuery) -> None:
     DB.reply_to[c.from_user.id] = int(c.data.split(":", 1)[1])
     await c.message.answer("Напиши ответ одним сообщением — я отправлю его пользователю.\n/cancel — отмена")
     await c.answer()
+
+
+@router.message(Command("paysupport"))
+async def cmd_paysupport(m: Message) -> None:
+    DB.awaiting_fb.add(m.from_user.id)
+    await m.answer("💳 Вопрос по оплате\n\nОпиши одним сообщением, что случилось с покупкой, — автор ответит здесь же. "
+                   "Если товар не пришёл, звёзды вернём.\n/cancel — отмена")
+
+
+@router.message(Command("terms"))
+async def cmd_terms(m: Message) -> None:
+    await m.answer("📄 Условия\n\nПокупки в трекере — цифровые товары внутри приложения: заморозки, починка серии и темы "
+                   "оформления. Они не дают XP и не влияют на места в лиге. Оплата — звёздами Telegram. "
+                   "Если товар не пришёл или что-то пошло не так, напиши /paysupport — вернём звёзды.")
+
+
+@router.message(Command("refund"))
+async def cmd_refund(m: Message, command: CommandObject) -> None:
+    if not await is_admin(m):
+        return await any_message(m)
+    parts = (command.args or "").split()
+    if len(parts) != 2 or not all(x.isdigit() for x in parts):
+        sh = await shop_stats()
+        lines = [f"• {r['name']} — {r['title']}, {r['stars']} ⭐, {r['day']}{' (возвращено)' if r['status'] != 'paid' else ''}"
+                 f"\n  <code>/refund {r['uid']} {r['id']}</code>" for r in sh["recent"][:10]]
+        await m.answer("Возврат: /refund ID_пользователя ID_покупки\n\nПоследние покупки:\n" + ("\n".join(lines) or "пока нет"),
+                       parse_mode="HTML")
+        return
+    await m.answer(await do_refund(m.bot, int(parts[0]), int(parts[1])))
 
 
 @router.message(Command("cancel"))
@@ -1481,8 +1711,8 @@ async def api_whoami(request: web.Request) -> web.Response:
         mk = max(0, int(body.get("mk", 0) or 0))
     except Exception:
         mk = 0
-    gifts = [{"day": r["day"], "n": int(r["n"])} for r in await DB.fetch(
-        "SELECT day, n FROM gifts WHERE user_id = $1 ORDER BY created", uid)]
+    gifts = [{"day": r["day"], "n": int(r["n"]), "src": r["src"] or "gift"} for r in await DB.fetch(
+        "SELECT day, n, src FROM gifts WHERE user_id = $1 ORDER BY created", uid)]
     since = max(mk, int((time.time() - 3 * 86400) * 1000))
     marks = [{"id": int(r["created"]), "h": r["habit"], "d": r["day"], "v": int(r["v"])} for r in await DB.fetch(
         "SELECT created, habit, day, v FROM marks WHERE user_id = $1 AND created > $2 ORDER BY created", uid, since)]
@@ -1495,7 +1725,108 @@ async def api_whoami(request: web.Request) -> web.Response:
         except (ValueError, KeyError):
             restore = None
     return web.json_response({"ok": True, "admin": await DB.admin_id() == uid, "gifts": gifts,
-                              "news": DB.news, "bot": BOT_USERNAME, "marks": marks, "restore": restore})
+                              "news": DB.news, "bot": BOT_USERNAME, "marks": marks, "restore": restore,
+                              "perks": await perks_for(uid), "shop": {k: v["stars"] for k, v in ITEMS.items()}})
+
+
+async def api_buy(request: web.Request) -> web.Response:
+    """Создаёт ссылку на оплату звёздами. Приложение открывает её через Telegram.WebApp.openInvoice."""
+    init = await auth(request)
+    if init is None:
+        return web.json_response({"ok": False, "error": "bad initData"}, status=401)
+    body = await request.json()
+    item, uid = str(body.get("item", "")), init.user.id
+    if item not in ITEMS:
+        return web.json_response({"ok": False, "error": "no item"}, status=400)
+    it = ITEMS[item]
+    days = [d for d in (body.get("days") or []) if isinstance(d, str) and DATE_RE.match(d)][:2]
+    if it["kind"] == "repair" and not repair_days_ok(days, uid):
+        return web.json_response({"ok": False, "error": "Починить можно только вчера или позавчера"}, status=400)
+    if it["kind"] == "theme" and it["theme"] in await owned_themes(uid):
+        return web.json_response({"ok": False, "error": "Тема уже есть"}, status=400)
+    if BOT is None:
+        return web.json_response({"ok": False, "error": "bot offline"}, status=503)
+    try:
+        link = await BOT.create_invoice_link(
+            title=it["title"], description=it["desc"], payload=f"{item}|{uid}|{','.join(days)}",
+            currency="XTR", prices=[LabeledPrice(label=it["title"], amount=it["stars"])])
+    except TelegramAPIError as e:
+        log.warning("invoice failed: %s", e)
+        return web.json_response({"ok": False, "error": "invoice failed"}, status=502)
+    return web.json_response({"ok": True, "link": link})
+
+
+async def api_repair(request: web.Request) -> web.Response:
+    """Бесплатная починка от владельца: тратим подаренный «кредит» на конкретные дни."""
+    init = await auth(request)
+    if init is None:
+        return web.json_response({"ok": False, "error": "bad initData"}, status=401)
+    body = await request.json()
+    uid = init.user.id
+    days = [d for d in (body.get("days") or []) if isinstance(d, str) and DATE_RE.match(d)][:2]
+    if not repair_days_ok(days, uid):
+        return web.json_response({"ok": False, "error": "bad days"}, status=400)
+    row = await DB.fetch("SELECT created FROM perks WHERE user_id = $1 AND kind = 'repair' AND value = '' ORDER BY created LIMIT 1", uid)
+    if not row:
+        return web.json_response({"ok": False, "error": "no credit"}, status=400)
+    await DB.execute("UPDATE perks SET value = $1 WHERE user_id = $2 AND created = $3", ",".join(days), uid, row[0]["created"])
+    return web.json_response({"ok": True, "perks": await perks_for(uid)})
+
+
+async def api_admin_grant(request: web.Request) -> web.Response:
+    """Владелец выдаёт товар из магазина бесплатно."""
+    init = await auth(request)
+    if init is None or await DB.admin_id() != init.user.id:
+        return web.json_response({"ok": False, "error": "forbidden"}, status=403)
+    body = await request.json()
+    who, item = str(body.get("who", "")).strip(), str(body.get("item", ""))
+    try:
+        n = max(1, min(10, int(body.get("n", 1))))
+    except (TypeError, ValueError):
+        n = 1
+    if item not in ITEMS or ITEMS[item]["kind"] == "tip":
+        return web.json_response({"ok": False, "error": "Нет такого товара"})
+    if who.lower() in ("me", "я", "мне", "себе"):
+        found = [init.user.id]
+    else:
+        found = await find_user(who)
+        if not found and BOT is not None:
+            await refresh_usernames(BOT)
+            found = await find_user(who)
+    rows = {r["user_id"]: r for r in await DB.fetch("SELECT user_id, name, username FROM users")}
+    label = lambda u: (rows.get(u) or {}).get("name") or (f"@{rows[u]['username']}" if u in rows and rows[u]["username"] else str(u))
+    if not found:
+        return web.json_response({"ok": False, "error": f"Не нашёл «{who}». Напиши ID, @username или имя."})
+    if len(found) > 1:
+        return web.json_response({"ok": False, "error": "Нашлось несколько — выбери:", "candidates": [
+            {"id": u, "name": label(u), "username": (rows.get(u) or {}).get("username")} for u in found[:10]]})
+    uid = found[0]
+    it = ITEMS[item]
+    if it["kind"] == "theme" and it["theme"] in await owned_themes(uid):
+        return web.json_response({"ok": False, "error": f"У пользователя «{label(uid)}» эта тема уже есть"})
+    await grant(uid, item, "admin", n=n if it["kind"] == "freeze" else None)
+    what = gift_text(item, n if it["kind"] == "freeze" else None)
+    if BOT is not None and uid != init.user.id:
+        try:
+            await BOT.send_message(uid, f"🎁 Тебе подарили {what}! Загляни в трекер ✨", reply_markup=open_kb())
+        except TelegramAPIError:
+            pass
+    k = n if it["kind"] == "freeze" else 0
+    name = f"{k} {plural(k, 'заморозка', 'заморозки', 'заморозок')}" if k else it["title"].lower() if it["kind"] == "repair" else it["title"]
+    return web.json_response({"ok": True, "text": f"🎁 {label(uid)} получает: {name}"})
+
+
+async def api_admin_refund(request: web.Request) -> web.Response:
+    init = await auth(request)
+    if init is None or await DB.admin_id() != init.user.id:
+        return web.json_response({"ok": False, "error": "forbidden"}, status=403)
+    body = await request.json()
+    try:
+        uid, created = int(body.get("uid")), int(body.get("id"))
+    except (TypeError, ValueError):
+        return web.json_response({"ok": False, "error": "bad id"})
+    text = await do_refund(BOT, uid, created)
+    return web.json_response({"ok": text.startswith("↩️"), "text": text, "shop": await shop_stats()})
 
 
 async def api_backup(request: web.Request) -> web.Response:
@@ -1553,7 +1884,8 @@ async def api_admin(request: web.Request) -> web.Response:
     return web.json_response({
         "ok": True, "stats": await collect_stats(), "series": await series(30), "retention": await retention(),
         "sources": await sources(), "habits": popular_habits(), "league": league_summary(), "limits": await limits(),
-        "storage": DB.kind, "bot": BOT_USERNAME, "reportHour": REPORT_HOUR,
+        "storage": DB.kind, "bot": BOT_USERNAME, "reportHour": REPORT_HOUR, "shop": await shop_stats(),
+        "items": {k: {"title": v["title"], "stars": v["stars"], "kind": v["kind"]} for k, v in ITEMS.items() if v["kind"] != "tip"},
     })
 
 
@@ -1621,6 +1953,7 @@ async def set_admin_commands(bot: Bot, admin: int) -> None:
             BotCommand(command="news", description="Плашка «Что нового»"),
             BotCommand(command="league", description="Группы лиги"),
             BotCommand(command="gift", description="Подарить заморозки"),
+            BotCommand(command="refund", description="Покупки и возвраты"),
             BotCommand(command="feedback", description="Написать автору"),
         ], scope=BotCommandScopeChat(chat_id=admin))
     except Exception as e:  # меню команд — не критично
@@ -1746,7 +2079,12 @@ def build_app() -> web.Application:
     app.router.add_post("/api/admin", api_admin)
     app.router.add_post("/api/backup", api_backup)
     app.router.add_post("/api/restore", api_restore)
-    for path in ("/api/sync", "/api/league", "/api/whoami", "/api/admin", "/api/backup", "/api/restore"):
+    app.router.add_post("/api/buy", api_buy)
+    app.router.add_post("/api/repair", api_repair)
+    app.router.add_post("/api/admin/grant", api_admin_grant)
+    app.router.add_post("/api/admin/refund", api_admin_refund)
+    for path in ("/api/sync", "/api/league", "/api/whoami", "/api/admin", "/api/backup", "/api/restore",
+                 "/api/buy", "/api/repair", "/api/admin/grant", "/api/admin/refund"):
         app.router.add_route("OPTIONS", path, options)
     return app
 
@@ -1775,6 +2113,7 @@ async def main() -> None:
         BotCommand(command="start", description="Открыть трекер"),
         BotCommand(command="help", description="Как пользоваться"),
         BotCommand(command="feedback", description="Написать автору"),
+        BotCommand(command="paysupport", description="Вопрос по оплате"),
     ], scope=BotCommandScopeDefault())
     admin = await DB.admin_id()
     if admin:
