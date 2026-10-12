@@ -488,6 +488,33 @@ body.sunset{--grad:linear-gradient(135deg,#ff8a3d 0%,#ff4f6d 55%,#d9468f 100%);-
 body.sunset .hero,body.sunset .scard{box-shadow:0 22px 44px -22px rgba(255,95,90,.75)}
 body.emerald{--grad:linear-gradient(135deg,#10b981 0%,#14b8a6 55%,#2f80ed 100%);--purple:#5eead4}
 body.emerald .hero,body.emerald .scard{box-shadow:0 22px 44px -22px rgba(20,184,166,.75)}
+/* ---------- Плюс ---------- */
+.plus-hero{position:relative;overflow:hidden;border-radius:28px;padding:22px 20px;margin-bottom:12px;color:#2a1a00;background:linear-gradient(135deg,#ffe08a 0%,#ffbf47 50%,#ff9a3c 100%);box-shadow:0 22px 44px -22px rgba(255,170,50,.8)}
+.plus-hero .pc{width:56px;height:56px;border-radius:18px;display:grid;place-items:center;background:rgba(255,255,255,.45);margin-bottom:12px}
+.plus-hero b{font-family:var(--disp);font-size:26px;display:block}
+.plus-hero span{font-weight:700;font-size:14px;opacity:.85}
+.plus-hero .glow{position:absolute;right:-40px;top:-40px;width:180px;height:180px;border-radius:50%;background:rgba(255,255,255,.25)}
+.pben{display:flex;gap:12px;align-items:center;padding:11px 0}
+.pben+.pben{border-top:1px solid var(--line)}
+.pben .ii{width:40px;height:40px;border-radius:13px;display:grid;place-items:center;flex:none;background:rgba(255,195,90,.14);color:var(--gold)}
+.pben b{display:block;font-weight:800}
+.pben span{color:var(--hint);font-size:13px;font-weight:600}
+.btn.gold{background:linear-gradient(135deg,#ffcf5a,#ff9f2e);color:#2a1a00;box-shadow:0 16px 32px -14px rgba(255,170,50,.9)}
+.plus-card{display:flex;align-items:center;gap:12px;width:100%;text-align:left;border-radius:22px;padding:14px 16px;margin-bottom:12px;color:#2a1a00;background:linear-gradient(135deg,#ffe08a,#ffb347)}
+.plus-card .meta{flex:1}.plus-card b{display:block;font-weight:800;font-size:16px}.plus-card span{font-size:13px;font-weight:700;opacity:.8}
+.pcrown{font-size:13px;margin-left:4px}
+.lockc{text-align:center;padding:22px 16px}
+.lockc .li{width:56px;height:56px;border-radius:18px;margin:0 auto 10px;display:grid;place-items:center;background:rgba(255,195,90,.14);color:var(--gold)}
+.lockc b{display:block;font-size:17px;font-weight:800;margin-bottom:6px}
+.lockc p{color:var(--hint);font-weight:600;font-size:14px;margin:0 0 14px}
+.cmp{display:flex;gap:10px}
+.cmp .tile{flex:1}
+.bars.y12{gap:3px}
+.bars.y12 .bar{min-width:0}
+.bars.y12 .v2{font-size:9px;letter-spacing:-.02em}
+.bars.y12 .x{font-size:10px}
+.bars.y12 .trk{width:100%;max-width:22px}
+.bars.y12 .f{border-radius:7px}
 /* ---------- магазин ---------- */
 .star{color:#ffc35a}
 .buy{flex:none;display:inline-flex;align-items:center;gap:6px;height:40px;padding:0 16px;border-radius:14px;background:linear-gradient(135deg,#ffcf5a,#ff9f2e);color:#2a1a00;font-weight:800;font-size:15px;white-space:nowrap;box-shadow:0 10px 22px -12px rgba(255,170,50,.9);transition:transform .15s var(--ease)}
@@ -684,7 +711,7 @@ function ring(size, sw, p, k, stroke = 'url(#gR)', track = 'rgba(255,255,255,.08
 }
 
 /* ---------- XP, уровни, лига ---------- */
-const UPD_VER = '2.3';
+const UPD_VER = '2.4';
 const XP_HABIT = 10, XP_DAY = 20, XP_MULT = 1.5, XP_MULT_FROM = 7;
 const LEVEL_AT = [0, 50, 150, 300, 500, 750, 1000, 1500, 2000, 2750, 3500, 4500];
 const levelStart = l => l <= LEVEL_AT.length ? LEVEL_AT[l - 1] : LEVEL_AT[LEVEL_AT.length - 1] + (l - LEVEL_AT.length) * 1000;
@@ -709,7 +736,7 @@ const S = {
   tab: 'today', view: 'main', sel: todayKey(), detailId: null, form: null, formBack: 'main', calOff: 0, statP: 'month',
   lastToday: todayKey(), lastView: null, sim: null, pulse: null,
   td: { d: '', t: {} }, meta: { lvl: 0, upd: '', theme: '', gifts: [], mk: 0, themes: [], rep: [], repc: 0 }, shop: null,
-  grant: { who: '', item: 'freeze', n: 1, msg: '', err: false, cands: null }, league: null, leagueErr: false, leagueLoading: false,
+  grant: { who: '', item: 'freeze', n: 1, days: 30, msg: '', err: false, cands: null }, plus: null, league: null, leagueErr: false, leagueLoading: false,
   isAdmin: false, news: null, bot: '', admin: null, adminErr: false,
 };
 const A = {}; // прошлые значения для анимаций
@@ -1014,6 +1041,8 @@ function viewToday() {
   const off = isT && ys === 'missed' ? repairOffer() : null;
   if (off) banner = `<button class="banner fix st" style="--i:2" data-act="shop"><div class="bi">${flame(22)}</div><div>Серия <b>${dni(off.streak)}</b> сгорела. Можно вернуть</div><span class="buy">${S.meta.repc ? 'Бесплатно' : `${ic('star', 13, 2.4)}${price('repair')}`}</span></button>`;
   else if (isT && ys === 'missed' && !sim.todayDone) banner = `<div class="banner miss st" style="--i:2"><div class="bi">${ic('flame', 20)}</div><div>Серия прервалась. Закрой сегодняшний день — и огонёк загорится снова</div></div>`;
+  if (!banner && isT && S.plus && S.plus.active && S.plus.kind === 'trial' && S.plus.until - Date.now() / 1000 < 2 * 86400)
+    banner = `<button class="banner fix st" style="--i:2" data-act="plus"><div class="bi" style="background:linear-gradient(135deg,#ffcf5a,#ff9f2e);color:#2a1a00">${ic('crown', 20, 2.2)}</div><div>Пробный Плюс закончится ${dLong(S.plus.until)}</div><span class="buy">${ic('star', 13, 2.4)}${S.plus.price}</span></button>`;
   const title = isT ? 'Сегодня' : cap(`${WD[isoWd(k) - 1]}, ${dm(k)}`);
   const ro = isT ? '' : `<div class="ro-note">${ic('lock', 18, 2.2)}<span>Прошлые дни только для просмотра — отмечать можно сегодня</span><button data-act="pick" data-d="${t}">К сегодня</button></div>`;
   const list = vis.length ? vis.map((h, i) => habitRow(h, k, i + 5)).join('') + (showSwipeHint() ? `<div class="hint">Свайпни привычку влево, чтобы удалить</div>` : '')
@@ -1105,6 +1134,7 @@ function viewForm() {
 }
 function saveForm() {
   const f = S.form, name = f.name.trim();
+  if (!f.id && capReached()) return plusSheet(`Бесплатно можно вести до ${freeCap()} привычек`);
   if (!name) { toast('Введи название'); document.querySelector('[data-field=name]')?.focus(); return; }
   const days = f.type === 'quit' || f.freq === 'daily' ? [1, 2, 3, 4, 5, 6, 7] : [...f.days].sort();
   if (!days.length) return toast('Выбери хотя бы один день');
@@ -1133,9 +1163,32 @@ async function deleteHabit(id) {
 function viewStats() {
   const head = `<div class="head st" style="--i:0"><h1 class="h1" style="font-size:28px">Статистика</h1></div>`;
   if (!S.habits.length) return [head + `<div class="empty st" style="--i:1">${flame(70, 'off')}<h3>Пока пусто</h3><p>Добавь привычку — и здесь появятся графики.</p></div>`, ''];
-  const t = todayKey(), mon = addDays(t, -(isoWd(t) - 1)), month = S.statP === 'month';
-  let bars = [], from, prevFrom, prevTo, label;
-  if (month) {
+  const t = todayKey(), mon = addDays(t, -(isoWd(t) - 1)), month = S.statP === 'month', year = S.statP === 'year';
+  const seg = `<div class="seg st" style="--i:1;--n:3;--x:${year ? 2 : month ? 1 : 0};margin-bottom:12px"><button class="${!month && !year ? 'on' : ''}" data-act="statp" data-v="week">Неделя</button><button class="${month ? 'on' : ''}" data-act="statp" data-v="month">Месяц</button><button class="${year ? 'on' : ''}" data-act="statp" data-v="year">Год ${isPlus() ? '' : '👑'}</button></div>`;
+  if (year && !isPlus()) return [head + seg + `<div class="card lockc st" style="--i:2"><div class="li">${ic('chart', 26, 2.2)}</div><b>Статистика за год — в Плюсе</b>
+      <p>Выполнение по месяцам, лучший месяц и день недели, сравнение с прошлым месяцем.</p><button class="btn gold" data-act="plus">${ic('crown', 20, 2.2)}Открыть Плюс</button></div>`, ''];
+  let bars = [], from, prevFrom, prevTo, label, extra = '';
+  if (year) {
+    const ymd = (y, m) => `${y}-${pad(m + 1)}-01`, now = parse(t);
+    let bestM = null;
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1), s0 = ymd(d.getFullYear(), d.getMonth()), e0 = addDays(ymd(d.getMonth() === 11 ? d.getFullYear() + 1 : d.getFullYear(), (d.getMonth() + 1) % 12), -1);
+      const [o, a] = allRange(s0, e0 < t ? e0 : t), p = a ? o / a : 0;
+      bars.push({ p, x: MONTHS[d.getMonth()].slice(0, 3), k: 'm' + i });
+      if (a && (!bestM || p > bestM.p)) bestM = { p, name: ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'][d.getMonth()] };
+    }
+    from = addDays(t, -364); prevFrom = addDays(t, -729); prevTo = addDays(t, -365); label = 'Выполнено за 12 месяцев';
+    const wd = [0, 0, 0, 0, 0, 0, 0].map(() => [0, 0]);
+    for (let d = from; d <= t; d = addDays(d, 1)) for (const h of S.habits) { if (!scheduled(h, d) || pending(h, d)) continue; const w = wd[isoWd(d) - 1]; w[1]++; if (success(h, d)) w[0]++; }
+    let bw = -1, bp = -1; wd.forEach(([o, a], i) => { if (a && o / a > bp) { bp = o / a; bw = i; } });
+    const first = `${t.slice(0, 8)}01`, lastS = addDays(first, -1), lastF = `${lastS.slice(0, 8)}01`;
+    const [co, ca] = allRange(first, t), [lo, la] = allRange(lastF, lastS);
+    const cp = ca ? Math.round(co / ca * 100) : 0, lp = la ? Math.round(lo / la * 100) : null;
+    extra = `<div class="card st" style="--i:3"><div class="card-h"><b>Итоги года</b><span>с Плюсом 👑</span></div>
+      <div class="cmp"><div class="tile"><b>${bestM ? bestM.name : '—'}</b><span>лучший месяц${bestM ? ` · ${Math.round(bestM.p * 100)}%` : ''}</span></div>
+        <div class="tile"><b>${bw >= 0 ? cap(WD_FULL[bw]) : '—'}</b><span>самый сильный день${bw >= 0 ? ` · ${Math.round(bp * 100)}%` : ''}</span></div></div>
+      <div class="small">Этот месяц — ${cp}%${lp === null ? '' : `, прошлый — ${lp}% (${cp - lp >= 0 ? '+' : ''}${cp - lp}%)`}.</div></div>`;
+  } else if (month) {
     for (let i = 3; i >= 0; i--) { const s = addDays(mon, -7 * i), [o, a] = allRange(s, addDays(s, 6)), d = parse(s); bars.push({ p: a ? o / a : 0, x: `${pad(d.getDate())}.${pad(d.getMonth() + 1)}`, k: 'w' + i }); }
     from = addDays(mon, -21); prevFrom = addDays(mon, -49); prevTo = addDays(mon, -22); label = 'Выполнено за 4 недели';
   } else {
@@ -1151,13 +1204,13 @@ function viewStats() {
   const barsHtml = bars.map((b, i) => `<div class="bar${i === bars.length - 1 ? ' hi' : ''}"><div class="v2">${Math.round(b.p * 100)}%</div><div class="trk"><div class="f" data-a="h" data-k="sb${S.statP}${b.k}" data-v="${b.p}"></div></div><div class="x">${b.x}</div></div>`).join('');
   const rows = S.habits.map((h, i) => { const [o, a] = habitRange(h, from, t), p = a ? o / a : 0;
     return `<div class="hb st" style="--i:${i + 4};--c:${h.color}" data-act="open" data-id="${h.id}"><div class="hb-h"><span>${esc(h.name)}</span><span>${Math.round(p * 100)}%</span></div><div class="pb"><i data-a="w" data-k="hb${S.statP}${h.id}" data-v="${p}"></i></div></div>`; }).join('');
-  const body = head + `<div class="seg st" style="--i:1;--x:${month ? 1 : 0};margin-bottom:12px"><button class="${!month ? 'on' : ''}" data-act="statp" data-v="week">Неделя</button><button class="${month ? 'on' : ''}" data-act="statp" data-v="month">Месяц</button></div>
+  const body = head + seg + `
     <div class="card st" style="--i:2"><div class="big"><div><div class="k">${label}</div><div class="v"><span data-c="${pc}" data-k="spc${S.statP}" data-suf="%">${pc}%</span></div><div class="s">${ok} из ${all} отметок</div></div>
       ${delta === null ? '' : `<div class="delta${delta < 0 ? ' neg' : ''}">${ic(delta < 0 ? 'down' : 'up', 16, 2.4)}${delta >= 0 ? '+' : ''}${delta}% к прошлым</div>`}</div>
-      <div class="bars">${barsHtml}</div></div>
+      <div class="bars${year ? ' y12' : ''}">${barsHtml}</div></div>
     <div class="t2 st" style="--i:3"><div class="tile"><div class="tl">${ic('flame', 15, 2.4)}Лучшая серия</div><b>${dni(best)}</b><span>${bestH ? esc(bestH.name) : '—'}</span></div>
       <div class="tile"><div class="tl">${ic('check', 15, 2.6)}Идеальные дни</div><b>${perfect} ${plural(perfect, 'день', 'дня', 'дней')}</b><span>все привычки выполнены</span></div></div>
-    <div class="sec st" style="--i:4"><h2>По привычкам</h2></div>${rows}`;
+    ${extra}<div class="sec st" style="--i:4"><h2>По привычкам</h2></div>${rows}`;
   return [body, ''];
 }
 
@@ -1185,14 +1238,59 @@ function viewStreak() {
       <div class="fzp"><span>${full ? 'Запас полный 💪' : `Новая заморозка через ${dni(toNext)}`}</span><em>${full ? `${sim.cap} / ${sim.cap}` : `${prog} / ${FREEZE_EVERY}`}</em></div>
       <div class="pb ice"><i data-a="w" data-k="fzp" data-v="${full ? 1 : prog / FREEZE_EVERY}"></i></div>
       <div class="small">Каждые ${FREEZE_EVERY} дней серии дают одну заморозку, слотов сейчас: ${sim.cap}.${capNote}</div></div>
+    <button class="plus-card st" style="--i:3" data-act="plus">${ic('crown', 26, 2.2)}<span class="meta"><b>Трекер Плюс</b><span>${plusStatus()}</span></span>${ic('right', 18, 2.4)}</button>
     <button class="card st shoprow" style="--i:3" data-act="shop"><span class="sitem" style="padding:0;flex:1"><span class="ii gold">${ic('star', 24, 2.4)}</span><span class="meta"><b>Магазин</b><span>Заморозки, починка серии и темы</span></span></span><span class="chev">${ic('right', 18, 2.4)}</span></button>
     <button class="btn st" style="--i:4;margin-bottom:8px" data-act="share">${ic('share', 20, 2.4)}Поделиться серией</button>`;
   return [body, ''];
 }
 function shareStreak() { shareText(`🔥 Моя серия в трекере привычек — ${dni(S.sim.streak)} подряд! Присоединяйся`); }
 
+/* ---------- Плюс ---------- */
+function plusStatus() {
+  const P = S.plus; if (!P) return 'Подписка за звёзды Telegram';
+  if (!P.active) return `${P.price} ⭐ в месяц · отменить можно в любой момент`;
+  if (P.kind === 'trial') return `Пробный период до ${dLong(P.until)}`;
+  if (P.kind === 'admin') return `Подарок до ${dLong(P.until)}`;
+  return P.canceled ? `Действует до ${dLong(P.until)} · продление отменено` : `Активен · продлится ${dLong(P.until)}`;
+}
+function viewPlus() {
+  const P = S.plus || { active: false, price: 99, freeHabits: 5, monthlyFreezes: 2 }, n = P.monthlyFreezes || 2;
+  const ben = [
+    ['plus', 'Безлимит привычек', `Без Плюса — до ${P.freeHabits || 5}`],
+    ['snow', `${n} заморозки каждый месяц`, 'Приходят с каждым оплаченным месяцем'],
+    ['flame', 'Починка серии каждый месяц', 'Вернёт сгоревшую серию бесплатно'],
+    ['moon', 'Все темы оформления', 'Полночь, Закат и Изумруд'],
+    ['chart', 'Статистика за год', 'Месяцы, лучшие дни недели, сравнение'],
+    ['crown', 'Значок 👑 в лиге', 'Видно всем в твоей группе'],
+  ].map(([i, b, t]) => `<div class="pben"><span class="ii">${ic(i, 20, 2.2)}</span><div><b>${b}</b><span>${t}</span></div></div>`).join('');
+  const paidOn = P.active && P.kind === 'paid';
+  const cta = paidOn ? (P.canceled ? `<button class="btn gold" data-act="plusresume">${ic('crown', 20, 2.2)}Возобновить продление</button>`
+      : `<button class="btn dark" data-act="pluscancel">Отменить продление</button>`)
+    : `<button class="btn gold" data-act="buy" data-v="plus">${ic('crown', 20, 2.2)}${P.active ? 'Оформить' : 'Подключить'} за ${P.price} ⭐ / месяц</button>`;
+  const note = P.active && P.kind === 'trial' ? `<div class="small" style="text-align:center;margin:10px 0 0">Если не оформишь — ничего не спишется, бесплатное останется, а привычки сверх ${P.freeHabits || 5} не пропадут.</div>` : '';
+  const body = `<div class="nav"><button class="back" data-act="back">${ic('left', 20, 2.4)}Назад</button><span class="navnote">Звёзды Telegram</span></div>
+    <div class="plus-hero st" style="--i:0"><div class="glow"></div><div class="pc">${ic('crown', 30, 2.2)}</div><b>Трекер Плюс</b><span>${plusStatus()}</span></div>
+    <div class="card st" style="--i:1">${ben}</div>
+    <div class="st" style="--i:2">${cta}${note}</div>
+    <div class="small st" style="--i:3;margin:14px 4px 0">Подписка продлевается каждые 30 дней. Отменить можно здесь или в Telegram: Настройки → Мои звёзды. После отмены Плюс работает до конца оплаченного срока.</div>`;
+  return [body, ''];
+}
+function plusSheet(why) {
+  overlay(`<div class="wn"><h3>Нужен Плюс 👑</h3><div class="ver">${why}</div></div>
+    <p>С «Трекер Плюс» — безлимит привычек, все темы, заморозки и починка серии каждый месяц.${S.plus && !S.plus.trialUsed ? '' : ''}</p>
+    <div class="row2"><button class="btn dark" data-r="0">Не сейчас</button><button class="btn gold" data-r="1">Подробнее</button></div>`,
+    r => { if (r === '1') { hap.sel(); go('plus'); } });
+}
+async function plusCancel(resume) {
+  if (!resume && !(await ask(`Отменить продление? Плюс будет работать до ${dLong(S.plus.until)}, потом спишется 0 ⭐.`, 'Отменить'))) return;
+  try {
+    const j = await api('/api/plus', { action: resume ? 'resume' : 'cancel' }); if (!j.ok) throw new Error(j.error);
+    S.plus = j.plus; hap.ok(); toast(resume ? 'Продление снова включено 👑' : 'Продление отменено'); render();
+  } catch (e) { toast(e.message && e.message.length < 70 ? e.message : 'Не получилось — попробуй позже'); }
+}
+
 /* ---------- магазин ---------- */
-const price = item => (S.shop && S.shop[item]) || { freeze: 25, freeze3: 60, repair: 75, theme_midnight: 50, theme_sunset: 50, theme_emerald: 50, tip50: 50, tip100: 100, tip250: 250 }[item];
+const price = item => (S.shop && S.shop[item]) || { plus: 99, freeze: 25, freeze3: 60, repair: 75, theme_midnight: 50, theme_sunset: 50, theme_emerald: 50, tip50: 50, tip100: 100, tip250: 250 }[item];
 const starBtn = (item, extra = '') => `<button class="buy" data-act="buy" data-v="${item}"${extra}>${ic('star', 15, 2.4)}${price(item)}</button>`;
 function viewShop() {
   const sim = S.sim, off = repairOffer(), t = todayKey();
@@ -1210,14 +1308,15 @@ function viewShop() {
   }).join('');
   const body = `<div class="nav"><button class="back" data-act="back">${ic('left', 20, 2.4)}Назад</button><span class="navnote">Звёзды Telegram</span></div>
     <div class="shop-h st" style="--i:0"><span class="si">${ic('star', 26, 2.4)}</span><div><b>Магазин</b><span>Покупки не дают XP и не влияют на лигу</span></div></div>
+    <button class="plus-card st" style="--i:1" data-act="plus">${ic('crown', 26, 2.2)}<span class="meta"><b>Трекер Плюс</b><span>${plusStatus()}</span></span>${ic('right', 18, 2.4)}</button>
     ${repair}
     <div class="card st" style="--i:2"><div class="card-h"><b>Заморозки</b><span>сейчас ${sim.freezes}</span></div>
       <div class="sitem"><span class="ii ice">${ic('snow', 24, 2.2)}</span><div class="meta"><b>Заморозка</b><span>Сработает сама, если пропустишь день</span></div>${starBtn('freeze')}</div>
       <div class="sitem"><span class="ii ice">${ic('snow', 24, 2.2)}</span><div class="meta"><b>3 заморозки<span class="tag">выгодно</span></b><span>Запас на отпуск или болезнь</span></div>${starBtn('freeze3')}</div>
       <div class="small">Купленные заморозки идут сверх слотов уровня.</div></div>
-    <div class="card st" style="--i:3"><div class="card-h"><b>Темы оформления</b><span>навсегда</span></div><div class="thg">${thc}</div>
+    <div class="card st" style="--i:3"><div class="card-h"><b>Темы оформления</b><span>${isPlus() ? 'все открыты с Плюсом' : 'навсегда'}</span></div><div class="thg">${thc}</div>
       ${S.meta.theme && themeOwned(S.meta.theme) ? `<button class="small" data-act="settheme" data-v="" style="display:block;margin:12px auto 0;color:var(--purple)">Вернуть стандартную тему</button>` : ''}
-      <div class="small">«Полночь» открывается бесплатно на 10 уровне.</div></div>
+      <div class="small">«Полночь» открывается бесплатно на 10 уровне, а с Плюсом доступны все темы.</div></div>
     <div class="card st" style="--i:4"><div class="card-h"><b>Поддержать автора</b><span>без товара</span></div>
       <div class="small" style="margin:0 0 12px">Трекер бесплатный и без рекламы. Если он помогает — можно сказать спасибо звёздами 💜</div>
       <div class="tips">${['tip50', 'tip100', 'tip250'].map(x => starBtn(x)).join('')}</div></div>
@@ -1238,15 +1337,16 @@ async function buy(item) {
   });
 }
 async function afterPay(item) {
-  const before = JSON.stringify([S.meta.gifts, S.meta.themes, S.meta.rep]);
+  const snap = () => JSON.stringify([S.meta.gifts, S.meta.themes, S.meta.rep, S.plus]), before = snap();
   for (let i = 0; i < 6; i++) {
     await new Promise(r => setTimeout(r, 1200));
     await whoami();
-    if (JSON.stringify([S.meta.gifts, S.meta.themes, S.meta.rep]) !== before || item.startsWith('tip')) break;
+    if (snap() !== before || item.startsWith('tip')) break;
   }
   if (item.startsWith('theme_')) { S.meta.theme = item.slice(6); saveMeta(); }
   S.lastView = null; render();
   if (item === 'repair') celebrate(S.sim.streak, false, 'Серия восстановлена — огонёк снова горит!');
+  else if (item === 'plus') toast('👑 Плюс подключён — спасибо!');
   else toast(item.startsWith('tip') ? 'Спасибо за поддержку! 💜' : '✅ Покупка добавлена');
 }
 async function repairFree() {
@@ -1321,7 +1421,7 @@ function levelUp(l, preview) {
   });
 }
 const newsVer = () => S.news && S.news.ver ? 'n' + S.news.ver : UPD_VER;
-const newsTitle = () => S.news && S.news.title ? S.news.title : `Обновление ${UPD_VER}: магазин, починка серии и новые темы`;
+const newsTitle = () => S.news && S.news.title ? S.news.title : `Обновление ${UPD_VER}: Трекер Плюс — 7 дней бесплатно`;
 function feedbackLink() {
   if (!S.bot) { toast('Напиши боту команду /feedback'); return; }
   const u = `https://t.me/${S.bot}?start=feedback`;
@@ -1336,6 +1436,7 @@ function whatsNew() {
     return;
   }
   const items = [
+    ['crown', 'Трекер Плюс', `Безлимит привычек, все темы, заморозки и починка серии каждый месяц, статистика за год. Первые 7 дней — бесплатно.`],
     ['star', 'Магазин', 'Заморозки, починка сгоревшей серии и новые темы «Закат» и «Изумруд» — за звёзды Telegram. Вход — на вкладке «Серия».'],
     ['check', 'Отметки прямо из чата', 'В напоминаниях появились кнопки «✅ Сделал» и «+1» — привычка засчитается без открытия трекера.'],
     ['chart', 'Итоги недели', 'В воскресенье вечером бот пришлёт, сколько дней закрыто, сколько XP набрано, место в лиге и лучшую привычку.'],
@@ -1379,7 +1480,7 @@ function viewAdmin() {
       <div class="tile"><div class="tl">${ic('flame', 15, 2.4)}Активные</div><b>${st.act1}</b><span>за сутки · ${st.act7} за неделю</span></div>
       <div class="tile"><div class="tl">${ic('trophy', 15, 2.2)}В лиге</div><b>${st.league}</b><span>на этой неделе</span></div>
       <div class="tile"><div class="tl">${ic('ban', 15, 2.2)}Заблокировали</div><b>${st.blocked}</b><span>бота</span></div></div>
-    ${adminShop(D)}
+    ${adminPlus(D)}${adminShop(D)}${adminWinback(D)}
     <div class="card st" style="--i:2"><div class="card-h"><b>Новые пользователи</b><span>${sum(sr.new)} за 30 дней</span></div>${bars(sr.new)}
       <div class="chx"><span>${shortDay(sr.days[0])}</span><span>${shortDay(sr.days[Math.floor(n / 2)])}</span><span>сегодня</span></div></div>
     <div class="card st" style="--i:3"><div class="card-h"><b>Активные по дням</b><span>сегодня ${sr.active[n - 1]}</span></div>${bars(sr.active, 'teal')}
@@ -1404,8 +1505,8 @@ function viewAdmin() {
 }
 function adminShop(D) {
   const sh = D.shop || { count: 0, total: 0, d30: 0, recent: [] }, G = S.grant, items = D.items || {};
-  const order = ['freeze', 'repair', 'theme_midnight', 'theme_sunset', 'theme_emerald'];
-  const label = k => k === 'freeze' ? 'Заморозки' : (items[k] && items[k].title) || k;
+  const order = ['plus', 'freeze', 'repair', 'theme_midnight', 'theme_sunset', 'theme_emerald'];
+  const label = k => k === 'freeze' ? 'Заморозки' : k === 'plus' ? 'Плюс 👑' : (items[k] && items[k].title) || k;
   const chips = order.filter(k => items[k] || k === 'freeze').map(k => `<button class="${G.item === k ? 'on' : ''}" data-act="gitem" data-v="${k}">${esc(label(k))}</button>`).join('');
   const cands = G.cands ? `<div class="gitems">${G.cands.map(c => `<button data-act="gpick" data-v="${c.id}">${esc(c.name)}${c.username ? ' @' + esc(c.username) : ''} · ${c.id}</button>`).join('')}</div>` : '';
   const rows = sh.recent.length ? sh.recent.slice(0, 15).map(r => `<div class="pr"><div class="meta"><b>${esc(r.name)} — ${esc(r.title)}</b><span>${shortDay(r.day)}</span></div>
@@ -1414,6 +1515,7 @@ function adminShop(D) {
   return `<div class="card st" style="--i:1"><div class="card-h"><b>Выдать пользователю</b><span>бесплатно</span></div>
       <input class="inp sm" id="gwho" style="margin:0" placeholder="ID, @username или имя · себе — me" value="${esc(G.who)}" autocomplete="off">
       <div class="gitems">${chips}</div>
+      ${G.item === 'plus' ? `<div class="gitems" style="margin-top:0">${[7, 30, 90, 365].map(d => `<button class="${G.days === d ? 'on' : ''}" data-act="gdays" data-v="${d}">${d} ${plural(d, 'день', 'дня', 'дней')}</button>`).join('')}</div>` : ''}
       ${G.item === 'freeze' ? `<div class="gstep"><button data-act="gn" data-v="-1">${ic('minus', 16, 2.6)}</button><span>${G.n} ${plural(G.n, 'заморозка', 'заморозки', 'заморозок')}</span><button data-act="gn" data-v="1">${ic('plus', 16, 2.6)}</button></div>` : ''}
       <button class="btn" data-act="grant">${ic('gift', 20, 2.2)}Выдать</button>
       ${G.msg ? `<div class="gmsg${G.err ? ' err' : ''}">${esc(G.msg)}</div>` : ''}${cands}</div>
@@ -1422,12 +1524,38 @@ function adminShop(D) {
       ${rows}
       <div class="small">Вывод звёзд — через Fragment: от 1000 ⭐, спустя 21 день после покупки.</div></div>`;
 }
+function adminPlus(D) {
+  const p = D.plus; if (!p) return '';
+  return `<div class="card st" style="--i:1"><div class="card-h"><b>Трекер Плюс 👑</b><span>${p.price} ⭐ / 30 дней</span></div>
+    <div class="ret" style="margin-bottom:10px"><div class="tile"><b>${p.renewing}</b><span>платят</span></div><div class="tile"><b>≈${fmt(p.mrr)}</b><span>⭐ в месяц</span></div><div class="tile"><b>${p.trial}</b><span>пробный</span></div></div>
+    <div class="kv"><span>Отменили продление (ещё действует)</span><b>${p.canceled}</b></div>
+    <div class="kv"><span>Подарено тобой</span><b>${p.gifted}</b></div>
+    <div class="kv"><span>Подписка закончилась</span><b>${p.lapsed}</b></div>
+    <div class="kv"><span>Всего за Плюс</span><b>${fmt(p.total)} ⭐</b></div></div>`;
+}
+function adminWinback(D) {
+  const w = D.winback; if (!w) return '';
+  const [d1, d2] = D.winbackDays || [7, 14];
+  return `<div class="card st" style="--i:1"><div class="row" style="padding:0;min-height:0;margin-bottom:12px"><div class="meta" style="flex:1"><b style="font-size:16px;font-weight:800">Возвращение ушедших</b>
+      <span style="display:block;color:var(--hint);font-size:13px;font-weight:600">${w.on ? 'включено' : 'выключено'}</span></div>
+      <button class="sw${w.on ? ' on' : ''}" data-act="wbtoggle" aria-label="Возвращение ушедших"></button></div>
+    <div class="ret" style="margin-bottom:10px"><div class="tile"><b>${w.inactive}</b><span>не заходят ${d1}+ дн.</span></div><div class="tile"><b>${w.sent}</b><span>написали</span></div>
+      <div class="tile"><b>${w.pct === null ? '—' : w.pct + '%'}</b><span>вернулись${w.sent ? ` · ${w.returned}` : ''}</span></div></div>
+    <div class="small" style="margin-top:0">Через ${d1} дней без захода бот вечером пишет мягкое сообщение и дарит ❄️ заморозку, ещё через ${d2} дней — последнее напоминание, дальше не беспокоит. Посмотреть тексты — <code style="font-family:inherit;font-weight:800;color:var(--text)">/winback test</code> в чате.</div></div>`;
+}
+async function toggleWinback(el) {
+  const on = !(S.admin && S.admin.winback && S.admin.winback.on);
+  el.classList.toggle('on', on); hap.tap();
+  try { const j = await api('/api/admin/winback', { on }); if (j.ok && S.admin) S.admin.winback = j.winback; toast(on ? 'Возвращение ушедших включено' : 'Возвращение ушедших выключено'); }
+  catch (e) { toast('Бот недоступен'); }
+  setTimeout(render, 250);
+}
 async function doGrant() {
   const G = S.grant, inp = document.getElementById('gwho'); if (inp) G.who = inp.value.trim();
   if (!G.who) { G.msg = 'Напиши, кому выдать'; G.err = true; render(); return; }
   G.msg = 'Выдаю…'; G.err = false; G.cands = null; render();
   try {
-    const j = await api('/api/admin/grant', { who: G.who, item: G.item, n: G.n });
+    const j = await api('/api/admin/grant', { who: G.who, item: G.item, n: G.item === 'plus' ? G.days : G.n });
     G.msg = j.ok ? j.text : j.error || 'Не получилось'; G.err = !j.ok && !j.candidates; G.cands = j.candidates || null;
     if (j.ok) { hap.ok(); G.who = ''; whoami(); }
   } catch (e) { G.msg = 'Бот недоступен — попробуй позже'; G.err = true; }
@@ -1527,6 +1655,8 @@ async function whoami() {
     S.isAdmin = !!j.admin; S.news = j.news || null; S.bot = j.bot || '';
     const gifts = (j.gifts || []).map(g => ({ day: g.day, n: g.n, src: g.src || 'gift' }));
     if (j.shop) S.shop = j.shop;
+    const plusWas = JSON.stringify(S.plus); S.plus = j.plus || S.plus;
+    const plusChanged = JSON.stringify(S.plus) !== plusWas;
     const perksChanged = applyPerks(j.perks);
     if (JSON.stringify(gifts) !== before) {
       const gsum = a => (a || []).filter(g => g.src !== 'buy').reduce((x, g) => x + g.n, 0);
@@ -1534,7 +1664,7 @@ async function whoami() {
       S.meta.gifts = gifts; saveMeta();
       if (add > 0) toast(`🎁 Тебе подарили ${add} ${plural(add, 'заморозку', 'заморозки', 'заморозок')}!`);
     }
-    if ((S.view === 'main' || S.view === 'shop') && (perksChanged || had !== S.isAdmin || (S.news && S.news.ver) !== hadNews || JSON.stringify(gifts) !== before)) render();
+    if ((S.view === 'main' || S.view === 'shop' || S.view === 'plus') && (perksChanged || plusChanged || had !== S.isAdmin || (S.news && S.news.ver) !== hadNews || JSON.stringify(gifts) !== before)) render();
   } catch (e) { /* бот недоступен */ }
 }
 
@@ -1572,7 +1702,7 @@ function viewLeague() {
     if (r.me) sub = i === 0 ? (L.rows.length > 1 ? 'Ты лидер группы 🔥' : '') : `ещё ${fmt(L.rows[i - 1].xp - r.xp + 1)} XP до ${i} места`;
     rows += `<div class="lrow st${r.me ? ' me' : ''}" style="--i:${Math.min(i + 4, 14)}"><span class="pl${i < 3 ? ' g' + (i + 1) : ''}">${i + 1}</span>
       <span class="av" style="background:${avColor(r.name)}">${esc((r.me ? 'Я' : r.name).charAt(0).toUpperCase())}</span>
-      <div class="meta" style="flex:1;min-width:0"><b>${r.me ? 'Ты' : esc(r.name)}</b>${sub ? `<span>${sub}</span>` : ''}</div><span class="x">${fmt(r.xp)} XP</span></div>`;
+      <div class="meta" style="flex:1;min-width:0"><b>${r.me ? 'Ты' : esc(r.name)}${r.plus ? '<span class="pcrown" title="Плюс">👑</span>' : ''}</b>${sub ? `<span>${sub}</span>` : ''}</div><span class="x">${fmt(r.xp)} XP</span></div>`;
     if (L.promote && i === L.promote - 1 && L.rows.length > L.promote) rows += `<div class="zone up">${ic('arrowup', 14, 2.6)}ЗОНА ПОВЫШЕНИЯ</div>`;
   });
   const alone = L.rows.length <= 1 ? `<div class="card lgempty st" style="--i:5"><p>Пока в твоей группе только ты. Позови друзей — соревноваться веселее, а топ-5 переходят в лигу выше.</p>
@@ -1617,7 +1747,11 @@ const THEMES = {
   emerald: { name: 'Изумруд', c: ['#10b981', '#14b8a6', '#2f80ed'] },
 };
 const BASE_C = ['#7a4dff', '#b14fd6', '#e5508a'];
-const themeOwned = id => (S.meta.themes || []).includes(id) || (id === 'midnight' && S.sim && S.sim.level >= 10);
+const isPlus = () => !!(S.plus && S.plus.active);
+const themeOwned = id => isPlus() || (S.meta.themes || []).includes(id) || (id === 'midnight' && S.sim && S.sim.level >= 10);
+const freeCap = () => (S.plus && S.plus.freeHabits) || 5;
+const capReached = () => !!S.plus && !isPlus() && S.habits.length >= freeCap();   // до ответа бота лимит не включаем
+const dLong = ts => { const d = new Date(ts * 1000); return `${d.getDate()} ${MONTHS[d.getMonth()]}`; };
 function applyTheme() {
   const cur = THEMES[S.meta.theme] && themeOwned(S.meta.theme) ? S.meta.theme : '';
   for (const id of Object.keys(THEMES)) document.body.classList.toggle(id, id === cur);
@@ -1665,7 +1799,7 @@ function render() {
   const viewId = S.view === 'main' ? 'main-' + S.tab : S.view, entering = viewId !== S.lastView;
   applyTheme();
   const [body, bottom] = S.view === 'detail' ? viewDetail() : S.view === 'form' ? viewForm() : S.view === 'level' ? viewLevel() : S.view === 'admin' ? viewAdmin()
-    : S.view === 'reminders' ? viewReminders() : S.view === 'shop' ? viewShop() : S.tab === 'today' ? viewToday() : S.tab === 'stats' ? viewStats()
+    : S.view === 'reminders' ? viewReminders() : S.view === 'shop' ? viewShop() : S.view === 'plus' ? viewPlus() : S.tab === 'today' ? viewToday() : S.tab === 'stats' ? viewStats()
     : S.tab === 'league' ? viewLeague() : viewStreak();
   const animCls = entering ? (S.view === 'main' ? ' enter fade' : ' enter push') : '';
   document.getElementById('app').innerHTML = `<div class="view${animCls}">${body}</div>${S.view === 'main' ? tabbar() : bottom}`;
@@ -1729,8 +1863,12 @@ const actions = {
   dec: (el, id) => mark(id, k => { const h = H(id); setVal(h, k, Math.max(0, val(h, k) - 1)); }),
   slip: (el, id) => mark(id, k => { const h = H(id); setVal(h, k, val(h, k) ? 0 : 1); }),
   open: (el, id) => { S.detailId = id; S.calOff = 0; hap.sel(); go('detail'); },
-  new: () => { hap.tap(); openForm(null); },
-  preset: el => openForm(null, PRESETS[+el.dataset.i]),
+  new: () => { hap.tap(); if (capReached()) return plusSheet(`Бесплатно можно вести до ${freeCap()} привычек`); openForm(null); },
+  preset: el => { if (capReached()) return plusSheet(`Бесплатно можно вести до ${freeCap()} привычек`); openForm(null, PRESETS[+el.dataset.i]); },
+  plus: () => { hap.sel(); go('plus'); },
+  pluscancel: () => plusCancel(false),
+  plusresume: () => plusCancel(true),
+  gdays: el => { S.grant.days = +el.dataset.v; const i = document.getElementById('gwho'); if (i) S.grant.who = i.value; hap.sel(); render(); },
   edit: (el, id) => openForm(H(id)),
   redit: (el, id) => openForm(H(id)),
   more: (el, id) => moreSheet(id),
@@ -1773,6 +1911,7 @@ const actions = {
   gpick: el => { const i = document.getElementById('gwho'); if (i) i.value = el.dataset.v; S.grant.cands = null; doGrant(); },
   grant: () => doGrant(),
   refund: el => doRefund(el),
+  wbtoggle: el => toggleWinback(el),
   rsave: () => { S.cfg = S.cfgDraft; saveCfg(); hap.ok(); toast('Напоминания сохранены'); goBack(); },
 };
 document.addEventListener('click', e => {

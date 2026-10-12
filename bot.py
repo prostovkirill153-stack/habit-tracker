@@ -16,6 +16,10 @@
       - «Итоги недели» — в воскресенье: закрытые дни, XP, место в лиге, лучшая привычка
   * кнопки «✅ Сделал» и «+1» прямо в напоминаниях: отметка попадает в приложение при следующем открытии
   * резервная копия: приложение присылает файл в чат, а если переслать его боту — предложит восстановить
+  * возвращение ушедших: через 7 дней без захода бот пишет мягкое сообщение и дарит заморозку,
+    через 14 дней после него — последнее напоминание; дальше не беспокоит (вкл/выкл — /winback)
+  * подписка «Трекер Плюс» за звёзды (каждые 30 дней): безлимит привычек, все темы, заморозки и починка серии
+    каждый месяц, годовая статистика, значок в лиге; 7 дней пробного периода каждому
   * магазин за Telegram Stars: заморозки, починка серии, темы, поддержка автора; владелец может выдавать
     всё это бесплатно и делать возвраты из панели 👑
 
@@ -108,6 +112,13 @@ BACKUP_KEY_RE = re.compile(r"^(h_[A-Za-z0-9_-]{1,32}|l_[A-Za-z0-9_-]{1,32}_\d{6}
 BACKUP_MAX = 2 * 1024 * 1024
 
 # магазин за Telegram Stars (валюта XTR). kind: что выдаём после оплаты
+WINBACK_DAYS, WINBACK_AGAIN_DAYS = 7, 14     # первое сообщение через 7 дней тишины, второе — ещё через 14
+WINBACK_HOURS = range(18, 21)                # пишем вечером по времени пользователя
+PLUS_STARS = 99                    # цена «Плюса» в звёздах за 30 дней
+PLUS_PERIOD = 30 * 86400           # Telegram пока поддерживает только 30-дневные подписки
+TRIAL_DAYS = 7
+FREE_HABITS = 5                    # без «Плюса» можно вести до 5 привычек
+PLUS_MONTHLY_FREEZES = 2
 THEMES = {"midnight": "Полночь", "sunset": "Закат", "emerald": "Изумруд"}
 ITEMS = {
     "freeze": {"title": "Заморозка", "stars": 25, "kind": "freeze", "n": 1,
@@ -118,6 +129,8 @@ ITEMS = {
                "desc": "Вернёт серию, которая сгорела за последние два дня."},
     **{f"theme_{k}": {"title": f"Тема «{v}»", "stars": 50, "kind": "theme", "theme": k,
                       "desc": f"Тема оформления «{v}» — навсегда."} for k, v in THEMES.items()},
+    "plus": {"title": "Трекер Плюс", "stars": PLUS_STARS, "kind": "plus",
+             "desc": "Безлимит привычек, все темы, 2 заморозки и починка серии каждый месяц, годовая статистика."},
     **{f"tip{n}": {"title": "Поддержать автора", "stars": n, "kind": "tip",
                    "desc": f"Спасибо за поддержку! {n} ⭐ помогут развивать трекер."} for n in (50, 100, 250)},
 }
@@ -182,6 +195,23 @@ SCHEMA = [
         value   TEXT   NOT NULL DEFAULT '',
         src     TEXT   NOT NULL DEFAULT '',
         PRIMARY KEY(user_id, created))""",
+    """CREATE TABLE IF NOT EXISTS winback(
+        user_id  BIGINT  NOT NULL,
+        base     BIGINT  NOT NULL,
+        stage    INTEGER NOT NULL DEFAULT 0,
+        sent     BIGINT  NOT NULL DEFAULT 0,
+        returned INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY(user_id, base))""",
+    """CREATE TABLE IF NOT EXISTS subs(
+        user_id    BIGINT  PRIMARY KEY,
+        until      BIGINT  NOT NULL DEFAULT 0,
+        kind       TEXT    NOT NULL DEFAULT '',
+        charge     TEXT    NOT NULL DEFAULT '',
+        canceled   INTEGER NOT NULL DEFAULT 0,
+        trial_used INTEGER NOT NULL DEFAULT 0,
+        started    BIGINT  NOT NULL DEFAULT 0,
+        renewals   INTEGER NOT NULL DEFAULT 0,
+        notified   INTEGER NOT NULL DEFAULT 0)""",
     """CREATE TABLE IF NOT EXISTS gifts(
         user_id BIGINT  NOT NULL,
         created BIGINT  NOT NULL,
@@ -233,6 +263,9 @@ class Store:
         self.awaiting_fb: set[int] = set()   # кто сейчас пишет отзыв
         self.reply_to: dict[int, int] = {}   # владелец отвечает пользователю
         self.pending_bc: dict[int, str] = {} # рассылка ждёт подтверждения
+        self.winback_on = True               # возвращение ушедших (владелец может выключить)
+        self.plus: dict[int, int] = {}       # user_id -> до какого времени действует «Плюс» (unix)
+        self.wb_pending: set[int] = set()    # кому писали и кто ещё не вернулся
 
     @property
     def kind(self) -> str:
@@ -269,6 +302,9 @@ class Store:
         self.active = {(today, r["user_id"]) for r in await self.fetch("SELECT user_id FROM activity WHERE day = $1", today)}
         meta = {r["k"]: r["v"] for r in await self.fetch("SELECT k, v FROM meta")}
         self.report_day = meta.get("report_day", "")
+        self.winback_on = meta.get("winback") != "off"
+        self.plus = {r["user_id"]: int(r["until"]) for r in await self.fetch("SELECT user_id, until FROM subs")}
+        self.wb_pending = {r["user_id"] for r in await self.fetch("SELECT DISTINCT user_id FROM winback WHERE stage > 0 AND returned = 0")}
         try:
             self.news = json.loads(meta["news"]) if meta.get("news") else None
         except ValueError:
@@ -419,6 +455,9 @@ class Store:
                 self.active = set()
             self.active.add((day, user_id))
             await self.execute("INSERT INTO activity(day, user_id) VALUES($1, $2) ON CONFLICT DO NOTHING", day, user_id)
+        if user_id in self.wb_pending:
+            self.wb_pending.discard(user_id)
+            await self.execute("UPDATE winback SET returned = 1 WHERE user_id = $1 AND stage > 0 AND returned = 0", user_id)
 
     async def set_blocked(self, user_id: int) -> None:
         await self.execute("UPDATE users SET blocked = 1 WHERE user_id = $1", user_id)
@@ -627,12 +666,205 @@ async def report_text() -> str:
     tagged = [f"{s} — {n}" for s, n in srcs if s != "без метки"][:5]
     if tagged:
         lines.append("🔗 Источники (всего): " + ", ".join(tagged))
+    ps = await plus_stats()
+    if ps["paid"] or ps["trial"] or ps["gifted"]:
+        lines.append(f"👑 Плюс: платят {ps['paid']} (≈{ps['mrr']} ⭐/мес), пробный {ps['trial']}, подарено {ps['gifted']}")
+    wb = await winback_stats()
+    if wb["sent"]:
+        lines.append(f"👋 Возвращение: написали {wb['sent']}, вернулись {wb['returned']}"
+                     + (f" ({wb['pct']}%)" if wb["pct"] is not None else "") + ("" if wb["on"] else " · выключено"))
     sh = await shop_stats()
     if sh["count"]:
         lines.append(f"⭐ Магазин: вчера {sh['yday']} ⭐, за 30 дней {sh['d30']} ⭐, всего {sh['total']} ⭐")
     lines.append(f"🗄 Лимиты: {limits_text(lm)}")
     lines.append("\nПодробнее — панель 👑 в приложении или /stats")
     return "\n".join(lines)
+
+
+# ---------- подписка «Трекер Плюс» ----------
+def is_plus(user_id: int, now: float | None = None) -> bool:
+    return DB.plus.get(user_id, 0) > (now or time.time())
+
+
+async def get_sub(user_id: int) -> dict | None:
+    rows = await DB.fetch("SELECT * FROM subs WHERE user_id = $1", user_id)
+    return rows[0] if rows else None
+
+
+async def save_sub(user_id: int, **f) -> None:
+    cur = await get_sub(user_id) or {"until": 0, "kind": "", "charge": "", "canceled": 0, "trial_used": 0,
+                                       "started": 0, "renewals": 0, "notified": 0}
+    cur.update(f)
+    await DB.execute(
+        """INSERT INTO subs(user_id, until, kind, charge, canceled, trial_used, started, renewals, notified)
+           VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9)
+           ON CONFLICT(user_id) DO UPDATE SET until = excluded.until, kind = excluded.kind, charge = excluded.charge,
+             canceled = excluded.canceled, trial_used = excluded.trial_used, started = excluded.started,
+             renewals = excluded.renewals, notified = excluded.notified""",
+        user_id, int(cur["until"]), cur["kind"], cur["charge"], int(cur["canceled"]), int(cur["trial_used"]),
+        int(cur["started"]), int(cur["renewals"]), int(cur["notified"]))
+    DB.plus[user_id] = int(cur["until"])
+
+
+async def ensure_trial(user_id: int) -> None:
+    """Первое открытие — 7 дней «Плюса» бесплатно (один раз)."""
+    sub = await get_sub(user_id)
+    if sub and (sub["trial_used"] or sub["until"] > time.time()):
+        return
+    now = int(time.time())
+    await save_sub(user_id, until=now + TRIAL_DAYS * 86400, kind="trial", trial_used=1, started=now, notified=0)
+
+
+async def plus_info(user_id: int) -> dict:
+    sub = await get_sub(user_id) or {}
+    until = int(sub.get("until") or 0)
+    return {"active": until > time.time(), "until": until, "kind": sub.get("kind") or "",
+            "canceled": bool(sub.get("canceled")), "trialUsed": bool(sub.get("trial_used")),
+            "price": PLUS_STARS, "freeHabits": FREE_HABITS, "monthlyFreezes": PLUS_MONTHLY_FREEZES}
+
+
+async def plus_paid(user_id: int, sp) -> str:
+    """Оплата или автопродление подписки. Каждый оплаченный месяц — 2 заморозки и одна починка серии."""
+    sub = await get_sub(user_id) or {}
+    now = int(time.time())
+    until = int(sp.subscription_expiration_date or 0) or max(now, int(sub.get("until") or 0)) + PLUS_PERIOD
+    renewal = bool(getattr(sp, "is_recurring", False)) and not bool(getattr(sp, "is_first_recurring", False))
+    charge = sub.get("charge") if renewal and sub.get("charge") else sp.telegram_payment_charge_id
+    await save_sub(user_id, until=until, kind="paid", charge=charge, canceled=0,
+                   started=sub.get("started") or now if renewal else now, renewals=int(sub.get("renewals") or 0) + (1 if renewal else 0),
+                   trial_used=1)
+    g = await add_gift(user_id, PLUS_MONTHLY_FREEZES, "plus")
+    await DB.insert_ts("perks", ("kind", "value", "src"), user_id, "repair", "", "plus")
+    return f"gifts:{g}"
+
+
+async def plus_stats() -> dict:
+    now = time.time()
+    rows = await DB.fetch("SELECT kind, until, canceled FROM subs")
+    act = [r for r in rows if r["until"] > now]
+    paid = [r for r in act if r["kind"] == "paid"]
+    renewing = [r for r in paid if not r["canceled"]]
+    stars = await DB.fetch("SELECT stars, created FROM purchases WHERE item = 'plus' AND status = 'paid'")
+    return {"paid": len(paid), "renewing": len(renewing), "canceled": len(paid) - len(renewing),
+            "trial": sum(1 for r in act if r["kind"] == "trial"), "gifted": sum(1 for r in act if r["kind"] == "admin"),
+            "lapsed": sum(1 for r in rows if r["kind"] == "paid" and r["until"] <= now),
+            "mrr": len(renewing) * PLUS_STARS, "total": sum(r["stars"] for r in stars),
+            "d30": sum(r["stars"] for r in stars if r["created"] >= (now - 30 * 86400) * 1000), "price": PLUS_STARS}
+
+
+async def trial_tick(bot, now: float | None = None) -> int:
+    """За сутки до конца пробного периода — одно мягкое напоминание вечером."""
+    now = now or time.time()
+    rows = await DB.fetch("SELECT user_id, until FROM subs WHERE kind = 'trial' AND notified = 0 AND until > $1 AND until <= $2",
+                          int(now), int(now + 86400))
+    sent = 0
+    for r in rows:
+        uid = int(r["user_id"])
+        tz = DB.profiles.get(uid, (180, ""))[0]
+        if (datetime.fromtimestamp(now, timezone.utc) + timedelta(minutes=tz)).hour not in WINBACK_HOURS:
+            continue
+        await DB.execute("UPDATE subs SET notified = 1 WHERE user_id = $1", uid)
+        try:
+            await bot.send_message(uid, "👑 Завтра заканчивается пробный «Трекер Плюс».\n\n"
+                                        f"Чтобы оставить безлимит привычек, темы и {PLUS_MONTHLY_FREEZES} заморозки каждый месяц — "
+                                        f"оформи Плюс за {PLUS_STARS} ⭐ в месяц. Если не нужно — ничего делать не надо, "
+                                        f"всё бесплатное останется, а привычки сверх {FREE_HABITS} никуда не пропадут.",
+                                   reply_markup=open_kb("Посмотреть Плюс 👑"))
+            sent += 1
+        except TelegramForbiddenError:
+            await DB.set_blocked(uid)
+        except TelegramAPIError as e:
+            log.warning("trial reminder to %s failed: %s", uid, e)
+    return sent
+
+
+# ---------- возвращение ушедших ----------
+def winback_text(stage: int, name: str, data: dict) -> str:
+    first = (name or "").split()[0] if name else ""
+    hi = f"{first}, привет!" if first else "Привет!"
+    habits = [h["name"] for h in data.get("habits", [])][:3]
+    if stage == 1:
+        if not habits:
+            return (f"👋 {hi} Давно не виделись.\n\nНачни с одной маленькой привычки — например, стакан воды утром 💧 "
+                    "Минута в день, и огонёк уже горит.\n\nДержи подарок: ❄️ заморозка уже ждёт в трекере.")
+        lst = ", ".join(f"«{h}»" for h in habits)
+        return (f"👋 {hi} Давно не виделись.\n\nТвои привычки на месте: {lst}. "
+                "Не нужно навёрстывать — достаточно одной отметки сегодня, и огонёк снова загорится 🔥\n\n"
+                "Держи подарок: ❄️ заморозка уже ждёт в трекере — она подстрахует, если снова выпадет тяжёлый день.")
+    return (f"🌱 {hi} Трекер всё ещё здесь.\n\nНачать заново можно с одной привычки на пару минут — без серий и рекордов. "
+            "Заморозка от меня никуда не делась.\n\nБольше писать не буду, обещаю 🙂")
+
+
+async def winback_tick(bot, now: float | None = None) -> int:
+    """Раз в полчаса: кому пора написать. Возвращает число отправленных сообщений."""
+    if not DB.winback_on:
+        return 0
+    now = now or time.time()
+    admin = await DB.admin_id()
+    cutoff = int(now - WINBACK_DAYS * 86400)
+    rows = await DB.fetch("SELECT user_id, name, last_seen FROM users WHERE blocked = 0 AND last_seen < $1", cutoff)
+    if not rows:
+        return 0
+    state = {(r["user_id"], r["base"]): r for r in await DB.fetch("SELECT user_id, base, stage, sent FROM winback")}
+    sent = 0
+    for r in rows:
+        uid, base = int(r["user_id"]), int(r["last_seen"])
+        prof = DB.profiles.get(uid)
+        if uid == admin or prof is None:  # писали только тем, кто хоть раз открывал трекер
+            continue
+        tz, raw = prof
+        try:
+            data = json.loads(raw)
+        except ValueError:
+            data = {}
+        cfg = data.get("cfg") or DEFAULT_CFG
+        if not any(cfg[k]["on"] for k in cfg) and not any(h.get("times") for h in data.get("habits", [])):
+            continue  # человек выключил все напоминания — не беспокоим
+        local = datetime.fromtimestamp(now, timezone.utc) + timedelta(minutes=tz)
+        if local.hour not in WINBACK_HOURS:
+            continue
+        st = state.get((uid, base))
+        stage = int(st["stage"]) if st else 0
+        if stage == 0:
+            nxt = 1
+        elif stage == 1 and now - int(st["sent"]) >= WINBACK_AGAIN_DAYS * 86400:
+            nxt = 2
+        else:
+            continue
+        ok = True
+        try:
+            await bot.send_message(uid, winback_text(nxt, r["name"] or "", data), reply_markup=open_kb("Открыть трекер 🔥"))
+        except TelegramForbiddenError:
+            ok = False
+            await DB.set_blocked(uid)
+        except TelegramAPIError as e:
+            log.warning("winback to %s failed: %s", uid, e)
+            continue
+        if ok and nxt == 1:
+            await add_gift(uid, 1, "winback")
+        await DB.execute("INSERT INTO winback(user_id, base, stage, sent) VALUES($1, $2, $3, $4) "
+                         "ON CONFLICT(user_id, base) DO UPDATE SET stage = excluded.stage, sent = excluded.sent",
+                         uid, base, nxt, int(now))
+        if ok:
+            DB.wb_pending.add(uid)
+            sent += 1
+            log.info("winback stage %s sent to %s", nxt, uid)
+    return sent
+
+
+async def winback_stats() -> dict:
+    now = time.time()
+    rows = await DB.fetch("SELECT user_id, stage, sent, returned FROM winback WHERE stage > 0")
+    cycles = len(rows)
+    back = sum(1 for r in rows if r["returned"])
+    waiting = 0
+    admin = await DB.admin_id()
+    for r in await DB.fetch("SELECT user_id FROM users WHERE blocked = 0 AND last_seen < $1", int(now - WINBACK_DAYS * 86400)):
+        if r["user_id"] in DB.profiles and r["user_id"] != admin:
+            waiting += 1
+    return {"on": DB.winback_on, "sent": cycles, "returned": back,
+            "pct": round(back / cycles * 100) if cycles else None, "inactive": waiting,
+            "d30": sum(1 for r in rows if r["sent"] >= now - 30 * 86400)}
 
 
 # ---------- магазин ----------
@@ -659,6 +891,13 @@ async def grant(user_id: int, item: str, src: str, days: list | None = None, n: 
         return f"gifts:{await add_gift(user_id, n or it['n'], src)}"
     if it["kind"] == "repair":
         return f"perks:{await DB.insert_ts('perks', ('kind', 'value', 'src'), user_id, 'repair', ','.join(days or []), src)}"
+    if it["kind"] == "plus":  # выдача владельцем: n — число дней
+        sub = await get_sub(user_id) or {}
+        base = max(time.time(), int(sub.get("until") or 0))
+        paid = sub.get("kind") == "paid" and int(sub.get("until") or 0) > time.time()
+        await save_sub(user_id, until=int(base + (n or 30) * 86400), kind="paid" if paid else "admin",
+                       started=sub.get("started") or int(time.time()), trial_used=1)
+        return ""
     if it["kind"] == "theme":
         if it["theme"] in await owned_themes(user_id):
             return ""
@@ -681,6 +920,9 @@ def gift_text(item: str, n: int | None = None) -> str:
         return f"{k} {plural(k, 'заморозку', 'заморозки', 'заморозок')}"
     if it["kind"] == "repair":
         return "починку серии — применишь, когда серия сгорит"
+    if it["kind"] == "plus":
+        k = n or 30
+        return f"«Трекер Плюс» на {k} {plural(k, 'день', 'дня', 'дней')} 👑"
     return it["title"].replace("Тема", "тему")
 
 
@@ -734,6 +976,13 @@ async def do_refund(bot: Bot, uid: int, created: int) -> str:
     except TelegramAPIError as e:
         return f"Telegram не дал вернуть звёзды: {e.message if hasattr(e, 'message') else e}"
     await revoke(uid, r["info"])
+    if r["item"] == "plus":
+        sub = await get_sub(uid) or {}
+        await save_sub(uid, until=max(int(time.time()), int(sub.get("until") or 0) - PLUS_PERIOD), canceled=1)
+        try:
+            await bot.edit_user_star_subscription(user_id=uid, telegram_payment_charge_id=sub.get("charge") or r["charge"], is_canceled=True)
+        except TelegramAPIError:
+            pass
     await DB.execute("UPDATE purchases SET status = 'refunded' WHERE user_id = $1 AND created = $2", uid, created)
     try:
         await bot.send_message(uid, f"↩️ Вернул {r['stars']} ⭐ за «{ITEMS.get(r['item'], {}).get('title', r['item'])}».")
@@ -976,6 +1225,9 @@ async def pre_checkout(q: PreCheckoutQuery) -> None:
         err = "Заказ устарел — открой магазин в трекере ещё раз."
     elif ITEMS[p[0]]["kind"] == "theme" and ITEMS[p[0]]["theme"] in await owned_themes(p[1]):
         err = "Эта тема у тебя уже есть 🙂"
+    elif ITEMS[p[0]]["kind"] == "plus" and is_plus(p[1]) and (await get_sub(p[1]) or {}).get("kind") == "paid" \
+            and not (await get_sub(p[1]) or {}).get("canceled"):
+        err = "Плюс уже подключён 👑"
     elif ITEMS[p[0]]["kind"] == "repair" and not repair_days_ok(p[2], p[1]):
         err = "Починить можно только серию, сгоревшую вчера или позавчера."
     await q.answer(ok=err is None, error_message=err)
@@ -989,12 +1241,24 @@ async def on_paid(m: Message) -> None:
     if await DB.fetchval("SELECT user_id FROM purchases WHERE charge = $1", sp.telegram_payment_charge_id):
         return  # уже обработали
     item = p[0] if p else "unknown"
-    ref = await grant(uid, item, "buy", p[2] if p else None) if p else ""
+    if item == "plus":
+        ref = await plus_paid(uid, sp)
+    else:
+        ref = await grant(uid, item, "buy", p[2] if p else None) if p else ""
     await DB.insert_ts("purchases", ("item", "stars", "charge", "info", "status"), uid,
                        item, int(sp.total_amount), sp.telegram_payment_charge_id, ref, "paid")
     it = ITEMS.get(item, {"title": item, "kind": "tip"})
-    thanks = ("Спасибо огромное за поддержку! 💜 Это правда помогает развивать трекер." if it["kind"] == "tip"
-              else f"✅ Готово: {it['title']}. Открой трекер — покупка уже там.")
+    if it["kind"] == "plus":
+        until = datetime.fromtimestamp(DB.plus.get(uid, 0), timezone.utc).strftime("%d.%m.%Y")
+        renewal = bool(getattr(sp, "is_recurring", False)) and not bool(getattr(sp, "is_first_recurring", False))
+        thanks = (f"👑 Плюс продлён до {until}. Спасибо, что ты с нами!\n❄️ +{PLUS_MONTHLY_FREEZES} заморозки и починка серии уже в трекере."
+                  if renewal else
+                  f"👑 «Трекер Плюс» подключён до {until} и будет продлеваться сам каждые 30 дней.\n\n"
+                  f"Уже в трекере: безлимит привычек, все темы, годовая статистика, ❄️ {PLUS_MONTHLY_FREEZES} заморозки и починка серии.\n"
+                  "Отменить можно в любой момент — в трекере или в настройках Telegram.")
+    else:
+        thanks = ("Спасибо огромное за поддержку! 💜 Это правда помогает развивать трекер." if it["kind"] == "tip"
+                  else f"✅ Готово: {it['title']}. Открой трекер — покупка уже там.")
     await m.answer(thanks, reply_markup=open_kb())
     admin = await DB.admin_id()
     if admin and admin != uid:
@@ -1087,6 +1351,7 @@ ADMIN_HELP = (
     "/ban ID — исключить из лиги · /unban ID — вернуть\n"
     "/gift @username или ID [кол-во] — подарить заморозки (по умолчанию 1)\n"
     "/refund — последние покупки и возврат звёзд\n"
+    "/winback — возвращение ушедших: статистика, вкл/выкл, превью сообщений\n"
     "/cancel — отменить ответ или рассылку\n\n"
     "🔗 Ссылки с меткой источника: t.me/{bot}?start=insta, t.me/{bot}?start=vk и т.п. — "
     "метки видны в /stats, отчёте и панели.\n"
@@ -1233,6 +1498,31 @@ async def cmd_refund(m: Message, command: CommandObject) -> None:
                        parse_mode="HTML")
         return
     await m.answer(await do_refund(m.bot, int(parts[0]), int(parts[1])))
+
+
+@router.message(Command("winback"))
+async def cmd_winback(m: Message, command: CommandObject) -> None:
+    if not await is_admin(m):
+        return await any_message(m)
+    arg = (command.args or "").strip().lower()
+    if arg in ("on", "off"):
+        DB.winback_on = arg == "on"
+        await DB.set_meta("winback", None if DB.winback_on else "off")
+    if arg == "test":
+        sample = {"habits": [{"name": "Читать 20 минут"}, {"name": "Зарядка"}]}
+        await m.answer("Так выглядят сообщения (заморозку при тесте не дарю):")
+        await m.answer(winback_text(1, display_name(m.from_user), sample), reply_markup=open_kb("Открыть трекер 🔥"))
+        await m.answer(winback_text(2, display_name(m.from_user), sample), reply_markup=open_kb("Открыть трекер 🔥"))
+        return
+    w = await winback_stats()
+    pct = f" ({w['pct']}%)" if w["pct"] is not None else ""
+    await m.answer(
+        f"👋 Возвращение ушедших: {'включено ✅' if w['on'] else 'выключено ⛔'}\n\n"
+        f"Через {WINBACK_DAYS} дней без захода бот вечером пишет мягкое сообщение и дарит ❄️ заморозку, "
+        f"через {WINBACK_AGAIN_DAYS} дней после него — последнее напоминание. Тех, кто выключил все напоминания, не трогает.\n\n"
+        f"Сейчас не заходят {WINBACK_DAYS}+ дней: {w['inactive']}\n"
+        f"Написали: {w['sent']} · вернулись: {w['returned']}{pct}\n\n"
+        "/winback off — выключить · /winback on — включить · /winback test — посмотреть сообщения")
 
 
 @router.message(Command("cancel"))
@@ -1416,6 +1706,10 @@ async def cb_done(c: CallbackQuery) -> None:
         await c.answer()
         return
     uid = c.from_user.id
+    try:
+        await DB.touch_user(uid, username=c.from_user.username or None, name=display_name(c.from_user))
+    except Exception:
+        log.exception("touch_user failed")
     prof = DB.profiles.get(uid)
     if not prof:
         await c.answer("Открой трекер, чтобы отметить", show_alert=True)
@@ -1690,7 +1984,7 @@ async def api_league(request: web.Request) -> web.Response:
         if u == uid:
             place = i
         name = DB.players.get(u, {}).get("name") or "Игрок"
-        rows.append({"name": name, "xp": r["xp"], "me": u == uid})
+        rows.append({"name": name, "xp": r["xp"], "me": u == uid, "plus": is_plus(u)})
     tier = me["tier"]
     return web.json_response({
         "ok": True, "week": week, "end": end, "tier": tier, "leagues": LEAGUES, "place": place, "size": n,
@@ -1724,7 +2018,8 @@ async def api_whoami(request: web.Request) -> web.Response:
             restore = {"created": int(row[0]["created"]), "habits": sum(1 for k in items if k.startswith("h_"))}
         except (ValueError, KeyError):
             restore = None
-    return web.json_response({"ok": True, "admin": await DB.admin_id() == uid, "gifts": gifts,
+    await ensure_trial(uid)
+    return web.json_response({"ok": True, "admin": await DB.admin_id() == uid, "gifts": gifts, "plus": await plus_info(uid),
                               "news": DB.news, "bot": BOT_USERNAME, "marks": marks, "restore": restore,
                               "perks": await perks_for(uid), "shop": {k: v["stars"] for k, v in ITEMS.items()}})
 
@@ -1744,12 +2039,17 @@ async def api_buy(request: web.Request) -> web.Response:
         return web.json_response({"ok": False, "error": "Починить можно только вчера или позавчера"}, status=400)
     if it["kind"] == "theme" and it["theme"] in await owned_themes(uid):
         return web.json_response({"ok": False, "error": "Тема уже есть"}, status=400)
+    if it["kind"] == "plus":
+        sub = await get_sub(uid) or {}
+        if sub.get("kind") == "paid" and int(sub.get("until") or 0) > time.time() and not sub.get("canceled"):
+            return web.json_response({"ok": False, "error": "Плюс уже подключён 👑"}, status=400)
     if BOT is None:
         return web.json_response({"ok": False, "error": "bot offline"}, status=503)
     try:
         link = await BOT.create_invoice_link(
             title=it["title"], description=it["desc"], payload=f"{item}|{uid}|{','.join(days)}",
-            currency="XTR", prices=[LabeledPrice(label=it["title"], amount=it["stars"])])
+            currency="XTR", prices=[LabeledPrice(label=it["title"], amount=it["stars"])],
+            subscription_period=PLUS_PERIOD if it["kind"] == "plus" else None)
     except TelegramAPIError as e:
         log.warning("invoice failed: %s", e)
         return web.json_response({"ok": False, "error": "invoice failed"}, status=502)
@@ -1781,7 +2081,7 @@ async def api_admin_grant(request: web.Request) -> web.Response:
     body = await request.json()
     who, item = str(body.get("who", "")).strip(), str(body.get("item", ""))
     try:
-        n = max(1, min(10, int(body.get("n", 1))))
+        n = max(1, min(366 if item == "plus" else 10, int(body.get("n", 1))))
     except (TypeError, ValueError):
         n = 1
     if item not in ITEMS or ITEMS[item]["kind"] == "tip":
@@ -1804,16 +2104,51 @@ async def api_admin_grant(request: web.Request) -> web.Response:
     it = ITEMS[item]
     if it["kind"] == "theme" and it["theme"] in await owned_themes(uid):
         return web.json_response({"ok": False, "error": f"У пользователя «{label(uid)}» эта тема уже есть"})
-    await grant(uid, item, "admin", n=n if it["kind"] == "freeze" else None)
-    what = gift_text(item, n if it["kind"] == "freeze" else None)
+    k = n if it["kind"] in ("freeze", "plus") else None
+    await grant(uid, item, "admin", n=k)
+    what = gift_text(item, k)
     if BOT is not None and uid != init.user.id:
         try:
             await BOT.send_message(uid, f"🎁 Тебе подарили {what}! Загляни в трекер ✨", reply_markup=open_kb())
         except TelegramAPIError:
             pass
-    k = n if it["kind"] == "freeze" else 0
-    name = f"{k} {plural(k, 'заморозка', 'заморозки', 'заморозок')}" if k else it["title"].lower() if it["kind"] == "repair" else it["title"]
+    if it["kind"] == "freeze":
+        name = f"{n} {plural(n, 'заморозка', 'заморозки', 'заморозок')}"
+    elif it["kind"] == "plus":
+        name = f"Плюс на {n} {plural(n, 'день', 'дня', 'дней')}"
+    else:
+        name = it["title"].lower() if it["kind"] == "repair" else it["title"]
     return web.json_response({"ok": True, "text": f"🎁 {label(uid)} получает: {name}"})
+
+
+async def api_plus(request: web.Request) -> web.Response:
+    """Отменить или возобновить автопродление «Плюса»."""
+    init = await auth(request)
+    if init is None:
+        return web.json_response({"ok": False, "error": "bad initData"}, status=401)
+    body = await request.json()
+    uid, cancel = init.user.id, body.get("action") == "cancel"
+    sub = await get_sub(uid)
+    if not sub or sub["kind"] != "paid" or not sub["charge"]:
+        return web.json_response({"ok": False, "error": "Нет оплаченной подписки"}, status=400)
+    try:
+        if BOT is not None:
+            await BOT.edit_user_star_subscription(user_id=uid, telegram_payment_charge_id=sub["charge"], is_canceled=cancel)
+    except TelegramAPIError as e:
+        log.warning("subscription edit failed: %s", e)
+        return web.json_response({"ok": False, "error": "Telegram не дал изменить подписку — попробуй позже"}, status=502)
+    await save_sub(uid, canceled=1 if cancel else 0)
+    return web.json_response({"ok": True, "plus": await plus_info(uid)})
+
+
+async def api_admin_winback(request: web.Request) -> web.Response:
+    init = await auth(request)
+    if init is None or await DB.admin_id() != init.user.id:
+        return web.json_response({"ok": False, "error": "forbidden"}, status=403)
+    body = await request.json()
+    DB.winback_on = bool(body.get("on"))
+    await DB.set_meta("winback", None if DB.winback_on else "off")
+    return web.json_response({"ok": True, "winback": await winback_stats()})
 
 
 async def api_admin_refund(request: web.Request) -> web.Response:
@@ -1885,6 +2220,7 @@ async def api_admin(request: web.Request) -> web.Response:
         "ok": True, "stats": await collect_stats(), "series": await series(30), "retention": await retention(),
         "sources": await sources(), "habits": popular_habits(), "league": league_summary(), "limits": await limits(),
         "storage": DB.kind, "bot": BOT_USERNAME, "reportHour": REPORT_HOUR, "shop": await shop_stats(),
+        "winback": await winback_stats(), "winbackDays": [WINBACK_DAYS, WINBACK_AGAIN_DAYS], "plus": await plus_stats(),
         "items": {k: {"title": v["title"], "stars": v["stars"], "kind": v["kind"]} for k, v in ITEMS.items() if v["kind"] != "tip"},
     })
 
@@ -1954,6 +2290,7 @@ async def set_admin_commands(bot: Bot, admin: int) -> None:
             BotCommand(command="league", description="Группы лиги"),
             BotCommand(command="gift", description="Подарить заморозки"),
             BotCommand(command="refund", description="Покупки и возвраты"),
+            BotCommand(command="winback", description="Возвращение ушедших"),
             BotCommand(command="feedback", description="Написать автору"),
         ], scope=BotCommandScopeChat(chat_id=admin))
     except Exception as e:  # меню команд — не критично
@@ -2058,6 +2395,9 @@ async def reminder_loop(bot: Bot) -> None:
                 await league_tick(bot)
             await check_reminders(bot)
             await maybe_report(bot)
+            if ticks % 60 == 0:  # раз в полчаса — не пора ли кому-то написать
+                await winback_tick(bot)
+                await trial_tick(bot)
             ticks += 1
             if ticks % 120 == 0:  # раз в час чистим память, раз в сутки — базу
                 await DB.prune_sent(db=ticks % 2880 == 0)
@@ -2083,7 +2423,9 @@ def build_app() -> web.Application:
     app.router.add_post("/api/repair", api_repair)
     app.router.add_post("/api/admin/grant", api_admin_grant)
     app.router.add_post("/api/admin/refund", api_admin_refund)
-    for path in ("/api/sync", "/api/league", "/api/whoami", "/api/admin", "/api/backup", "/api/restore",
+    app.router.add_post("/api/admin/winback", api_admin_winback)
+    app.router.add_post("/api/plus", api_plus)
+    for path in ("/api/plus", "/api/admin/winback", "/api/sync", "/api/league", "/api/whoami", "/api/admin", "/api/backup", "/api/restore",
                  "/api/buy", "/api/repair", "/api/admin/grant", "/api/admin/refund"):
         app.router.add_route("OPTIONS", path, options)
     return app
